@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.math.BigDecimal;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -18,7 +19,7 @@ class CourseStoreTest {
     @TempDir Path directory;
 
     @Test void actualDataSurvivesRestartAndDeletionCascades() throws Exception {
-        Path database = directory.resolve("restart.sqlite3");
+        Path database = Files.createDirectory(directory.resolve("Data demo")).resolve("restart.sqlite3");
         CourseStore first = new CourseStore(database);
         first.initialize();
         Course course = example();

@@ -35,7 +35,8 @@ $demo = Join-Path $env:TEMP ("whatif-demo-" + [guid]::NewGuid())
 - [Kebijakan perhitungan dan peta OOP](docs/desain.md)
 - [Hasil verifikasi dan tangkapan layar](docs/verifikasi.md)
 - [Atribusi dan lisensi](docs/atribusi.md)
+- [Build dan peninjauan app-image Windows](docs/kemas-windows.md)
 
 ## Di luar cakupan versi pertama
 
-Akun, dashboard, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, skenario bernama, perbandingan skenario, tanggal, catatan, skala kustom, pembulatan alternatif, Pass/Fail, presensi, nilai huruf langsung, override hasil akhir, ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, SKS, IP semester, IPK, serta installer dan rilis.
+Akun, dashboard, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, skenario bernama, perbandingan skenario, tanggal, catatan, skala kustom, pembulatan alternatif, Pass/Fail, presensi, nilai huruf langsung, override hasil akhir, ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, SKS, IP semester, IPK, serta installer dan publikasi GitHub Release.

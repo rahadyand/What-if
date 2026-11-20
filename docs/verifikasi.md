@@ -31,3 +31,21 @@ JavaFX melaporkan judul dirender sebagai **Merriweather Bold (Bold)** dan teks i
 ## Batas verifikasi referensi
 
 Drive `D:` tidak terpasang di workspace Linux. Laporan investigasi, koleksi tangkapan layar Power Planner, dan proyek Tutup Buku tidak tersedia untuk diperiksa. Kebijakan aplikasi diambil dari keputusan pada spesifikasi implementasi dan diuji secara independen. Perilaku Power Planner, versi dependensi lama, dan kasus pembulatan integer multi-kategori Power Planner belum bisa diverifikasi di lingkungan ini.
+
+## Audit lanjutan dan persiapan paket Windows
+
+Arsip sumber lolos pemeriksaan ZIP. Git bundle memuat riwayat lengkap hingga `d42fbef1bdefa6bfb70d4dd3b1b6a6d508f1cab1`, sama dengan commit awal workspace. Proyek lokal digunakan langsung tanpa ekstraksi menimpa berkas.
+
+| Keputusan produk | Hasil tinjauan kode dan tes sumber |
+| --- | --- |
+| Bobot relatif dan dua agregasi | Bobot kategori peserta dinormalisasi. Di dalamnya, porsi dihitung dari maksimum penilaian atau dibagi sama rata sesuai metode. |
+| Kosong, nol, dan pengecualian | Skor kosong diabaikan pada hasil aktual. Nol tetap dievaluasi. Hasil simulasi memakai baris bebas untuk proyeksi dan mengabaikan baris yang dikeluarkan. |
+| Override, pemulihan, dan penyimpanan | Simulasi menyimpan salinan kerja, asumsi, dan pengecualian di memori. Penyimpanan aktual terpisah. Pemulihan, reset, dan keluar diuji terhadap basis data sementara. |
+| Proyeksi dan klasifikasi | Rasio bersama dihitung eksak. Saran skor dibulatkan ke atas dan dipakai untuk menghitung ulang proyeksi. Huruf memakai nilai eksak. Saran di atas maksimum memperlihatkan kebutuhan bonus. |
+| Parser dan data setelah restart | Koma dan titik menghasilkan desimal yang sama. Masukan ambigu ditolak. Tes restart SQLite sekarang menggunakan subfolder dengan spasi. |
+
+`./mvnw clean verify` lulus dengan 16 tes sumber di Linux. POM dan versi dependensi runtime tetap sama. Maven menyelesaikan artefak JavaFX dengan classifier `win`. Header PE `glass.dll` pada JavaFX dan `sqlitejdbc.dll` pada SQLite JDBC diperiksa sebagai x64. Script PowerShell Windows lolos parsing pada PowerShell 7.4 dan berhenti pada pemeriksaan platform ketika dijalankan di Linux.
+
+**Uji paket Linux.** Adaptasi alur yang sama untuk Linux membuat app-image dengan JDK 21 beserta ZIP, notis lisensi, dan manifest hash. Hash ZIP serta manifest berkas hasil ekstraksi cocok. Launcher hasil ekstraksi berjalan dari folder berspasi dengan `JAVA_HOME` dilepas dan PATH kosong dari executable Java maupun Maven. Uji menggunakan basis data demo terisolasi. Pada 1366 × 768, launcher membuka layar kosong, menyimpan data, memproyeksikan 82,1% dengan saran 73,65, menyembunyikan hasil untuk target ambigu, dan menampilkan kebutuhan bonus. Pengecualian, penyertaan kembali, pembatalan konfirmasi, serta penutupan dan pembukaan ulang berhasil. Setelah buka ulang, nilai Kuis tetap 49,5, nilai Ujian tetap kosong, dan target What If kembali ke 85%. Log launcher melaporkan Merriweather Bold dan System Regular. [Tangkapan layar app-image Linux](screenshots/10-linux-app-image.png)
+
+**Pemeriksaan yang tertahan.** Drive `D:` dan bukti investigasi tetap tidak terpasang. Pengujian Windows native, font Windows, DPI Windows, pembuatan Windows app-image, dan pengujian EXE hasil ekstraksi masih tertahan karena sesi ini tidak menyediakan host Windows. Langkah build dan verifikasi Windows tersedia di [panduan app-image](kemas-windows.md).
