@@ -133,7 +133,7 @@ final class Simulation {
 
     record State(Course baseline, String target, List<Row> rows) {
         State {
-            Objects.requireNonNull(baseline);
+            baseline = Objects.requireNonNull(baseline).withAcademic(AcademicDetails.EMPTY);
             Objects.requireNonNull(target);
             rows = List.copyOf(rows);
         }

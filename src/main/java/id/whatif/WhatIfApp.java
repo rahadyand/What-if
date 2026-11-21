@@ -5,7 +5,6 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Pos;
 import javafx.scene.AccessibleRole;
@@ -29,6 +28,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -42,8 +42,7 @@ public final class WhatIfApp extends Application {
     private static final String NONE = "—";
     private static String headingFamily;
 
-    private final ObservableList<Course> courses = FXCollections.observableArrayList();
-    private final ListView<Course> courseList = new ListView<>(courses);
+    private final List<Course> courses = new ArrayList<>();
     private final BorderPane root = new BorderPane();
     private final ExecutorService io = Executors.newSingleThreadExecutor(job -> {
         Thread worker = new Thread(job, "whatif-sqlite");
@@ -58,12 +57,13 @@ public final class WhatIfApp extends Application {
     private Scenario openedScenario;
     private List<Scenario> scenarios = List.of();
     private Label scenarioStatus;
-    private boolean selectingCourse;
     private boolean syncingTarget;
     private boolean invalidDraft;
     private boolean busy;
-    private Button addCourse;
-    private Label courseCount;
+    private AcademicSidebar sidebar;
+    private List<Semester> semesters = List.of();
+    private UUID activeSemester;
+    private UUID viewedSemester;
 
     private TextField targetField;
     private ComboBox<Grade> targetLetter;
@@ -84,7 +84,9 @@ public final class WhatIfApp extends Application {
         store = new CourseStore(CourseStore.defaultDatabase());
         loadTypography();
         root.getStyleClass().add("workspace");
-        root.setLeft(sidebar());
+        sidebar = new AcademicSidebar(() -> navigateDashboard(viewedSemester), () -> editSemester(null),
+                this::navigateDashboard, selected -> openCourse(selected, false), id -> editCourse(null, id));
+        root.setLeft(sidebar);
         style(root);
         stage.setTitle("What If");
         stage.setScene(new Scene(root, 1170, 700));
@@ -122,56 +124,43 @@ public final class WhatIfApp extends Application {
         return "System";
     }
 
-    private VBox sidebar() {
+    static ImageView wordmark(double width) {
         ImageView logo = new ImageView(new Image(WhatIfApp.class.getResource("/branding/Logo.png").toExternalForm()));
         logo.getStyleClass().add("brand-logo");
         logo.setAccessibleRole(AccessibleRole.IMAGE_VIEW);
         logo.setAccessibleText("What If");
-        logo.setFitWidth(176);
+        logo.setFitWidth(width);
         logo.setPreserveRatio(true);
         logo.setSmooth(true);
-        HBox identity = new HBox(logo);
-        identity.setAlignment(Pos.CENTER_LEFT);
+        return logo;
+    }
 
-        courseCount = label("0", "sidebar-count");
-        HBox listHeader = new HBox(8, label("MATA KULIAH", "eyebrow"), spacer(), courseCount);
-        listHeader.setAlignment(Pos.CENTER_LEFT);
-        courseList.setPlaceholder(label("Belum ada mata kuliah", "muted"));
-        courseList.setCellFactory(unused -> new ListCell<>() {
-            { setPrefWidth(0); }
-
-            @Override protected void updateItem(Course item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty ? null : item.name());
-                setTooltip(empty ? null : new Tooltip(item.name()));
-            }
-        });
-        courseList.getSelectionModel().selectedItemProperty().addListener((unused, before, next) -> selectCourse(next));
-        VBox.setVgrow(courseList, Priority.ALWAYS);
-        addCourse = button("+ Mata kuliah", () -> editCourse(null));
-        addCourse.getStyleClass().add("sidebar-add");
-        addCourse.setMaxWidth(Double.MAX_VALUE);
-        VBox sidebar = new VBox(18, identity, listHeader, courseList, addCourse);
-        sidebar.getStyleClass().add("sidebar");
-        sidebar.setPrefWidth(212);
-        return sidebar;
+    static ScrollPane verticalScroll(Node content, String css) {
+        ScrollPane scroll = new ScrollPane(content);
+        scroll.getStyleClass().add(css);
+        scroll.setFocusTraversable(true);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        return scroll;
     }
 
     private void initialize() {
         busy = true;
-        addCourse.setDisable(true);
+        sidebar.setDisable(true);
         showEmpty("Memuat mata kuliah…", "Membuka penyimpanan lokal.", null);
         runIo(() -> {
             store.initialize();
-            return new Workspace(store.load(), store.loadScenarios());
+            return new Workspace(store.load(), store.loadScenarios(), store.loadSemesters());
         }, loaded -> {
             busy = false;
-            addCourse.setDisable(false);
-            courses.setAll(loaded.courses());
+            sidebar.setDisable(false);
+            courses.clear();
+            courses.addAll(loaded.courses());
             scenarios = loaded.scenarios();
-            updateCount();
-            if (courses.isEmpty()) showCourse(null);
-            else courseList.getSelectionModel().selectFirst();
+            semesters = loaded.terms().semesters();
+            activeSemester = loaded.terms().activeId();
+            viewedSemester = activeSemester != null ? activeSemester : semesters.isEmpty() ? null : semesters.getFirst().id();
+            showDashboard();
         }, failure -> {
             busy = false;
             Button retry = button("Coba lagi", this::initialize);
@@ -179,42 +168,64 @@ public final class WhatIfApp extends Application {
         });
     }
 
-    private void selectCourse(Course next) {
-        if (selectingCourse || next == course) return;
-        if (!confirmTransition("Ganti mata kuliah")) {
-            selectInSidebar(course);
-            return;
-        }
-        course = next;
-        selectInSidebar(course);
+    private Semester semester(UUID id) {
+        return semesters.stream().filter(item -> item.id().equals(id)).findFirst().orElse(null);
+    }
+
+    private void navigateDashboard(UUID id) {
+        if (course == null && Objects.equals(viewedSemester, id)) return;
+        if (!confirmTransition("Buka Dashboard")) return;
+        course = null;
         simulation = null;
         openedScenario = null;
         invalidDraft = false;
+        viewedSemester = id;
+        showDashboard();
+    }
+
+    private void showDashboard() {
+        table = null;
+        Semester viewed = semester(viewedSemester);
+        List<Course> grouped = courses.stream().filter(item -> Objects.equals(viewedSemester, item.academic().semesterId())).toList();
+        var dashboard = new AcademicDashboard(viewed, viewed != null && viewed.id().equals(activeSemester), grouped,
+                () -> editSemester(null), () -> editSemester(viewed), () -> activateSemester(viewed),
+                () -> editCourse(null, viewedSemester), this::openCourse);
+        root.setCenter(verticalScroll(dashboard, "dashboard-scroll"));
+        updateSidebar();
+    }
+
+    private void openCourse(Course next, boolean whatIf) {
+        if (next.equals(course) && whatIf == (simulation != null)) return;
+        if (!confirmTransition("Buka mata kuliah")) return;
+        course = next;
+        viewedSemester = next.academic().semesterId();
+        simulation = whatIf ? new Simulation(next) : null;
+        openedScenario = null;
+        invalidDraft = false;
+        updateSidebar();
         showCourse(null);
     }
 
-    private void selectInSidebar(Course selection) {
-        selectingCourse = true;
-        if (selection == null) courseList.getSelectionModel().clearSelection();
-        else courseList.getSelectionModel().select(selection);
-        selectingCourse = false;
+    private void updateSidebar() {
+        sidebar.expand(viewedSemester);
+        sidebar.render(semesters, courses, activeSemester, viewedSemester, course);
     }
 
     private void showCourse(UUID selectRow) {
-        if (course == null) {
-            Button create = button("+ Tambah mata kuliah", () -> editCourse(null));
-            showEmpty("Mulai dengan mata kuliah", "Tambahkan mata kuliah, lalu masukkan penilaian dan hitung target Anda.", create);
-            return;
-        }
-
         Label name = heading(course.name(), "page-title");
         name.setWrapText(true);
         name.setMaxHeight(74);
         name.setTooltip(new Tooltip(course.name()));
         Label context = label(simulation == null ? "Pengelolaan nilai mata kuliah" : "Simulasi sementara", "eyebrow");
-        VBox title = new VBox(4, context, name);
+        var academic = course.academic();
+        Semester assigned = semester(academic.semesterId());
+        String term = assigned == null ? AcademicDetails.UNGROUPED : assigned.toString();
+        Label academicLine = Editor.note(term + " · " + academic.sksText() + " · Kehadiran " + academic.attendanceText(), "muted");
+        academicLine.setId("course-academic-details");
+        VBox title = new VBox(4, context, name, academicLine);
+        title.setMinWidth(0);
         HBox.setHgrow(title, Priority.ALWAYS);
-        Button settings = button("Pengaturan", () -> editCourse(course));
+        Button settings = button("Pengaturan", () -> editCourse(course, viewedSemester));
         settings.setVisible(simulation == null);
         settings.setManaged(settings.isVisible());
         Button deleteCourse = button("Hapus mata kuliah", this::deleteSelectedCourse);
@@ -251,12 +262,7 @@ public final class WhatIfApp extends Application {
         } else {
             targetSummary = new TargetSummary(course, courseScenarios());
             page.getChildren().add(targetSummary);
-            ScrollPane scroll = new ScrollPane(page);
-            scroll.getStyleClass().add("simulation-page-scroll");
-            scroll.setFocusTraversable(true);
-            scroll.setFitToWidth(true);
-            scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-            root.setCenter(scroll);
+            root.setCenter(verticalScroll(page, "simulation-page-scroll"));
         }
         refreshResults(selectRow);
     }
@@ -788,10 +794,50 @@ public final class WhatIfApp extends Application {
         resultDetail.setText(detail);
     }
 
-    private void editCourse(Course previous) {
+    private void editCourse(Course previous, UUID initialSemester) {
         if (previous == null && !confirmTransition("Tambah mata kuliah")) return;
-        Editor.course(stage, previous, this::invalidDraft, (draft, success, failure) ->
-                save(previous, draft, null, success, failure));
+        Editor.course(stage, previous, semesters, initialSemester, previous == null ? ignored -> {} : this::invalidDraft,
+                (draft, success, failure) -> save(previous, draft, null, success, failure));
+    }
+
+    private void editSemester(Semester previous) {
+        if (!confirmTransition("Pengaturan semester")) return;
+        Editor.semester(stage, previous, (draft, success, failure) -> {
+            busy = true;
+            root.setDisable(true);
+            runIo(() -> store.saveSemester(previous, draft), saved -> {
+                busy = false;
+                root.setDisable(false);
+                semesters = saved.semesters();
+                activeSemester = saved.activeId();
+                course = null;
+                simulation = null;
+                openedScenario = null;
+                invalidDraft = false;
+                viewedSemester = draft.id();
+                showDashboard();
+                success.run();
+            }, message -> {
+                busy = false;
+                root.setDisable(false);
+                failure.accept(message);
+            });
+        });
+    }
+
+    private void activateSemester(Semester semester) {
+        busy = true;
+        root.setDisable(true);
+        runIo(() -> { store.setActiveSemester(semester.id()); return semester.id(); }, id -> {
+            busy = false;
+            root.setDisable(false);
+            activeSemester = id;
+            showDashboard();
+        }, message -> {
+            busy = false;
+            root.setDisable(false);
+            errorAlert(stage, message);
+        });
     }
 
     private void manageCategories() {
@@ -846,15 +892,11 @@ public final class WhatIfApp extends Application {
         runIo(() -> { store.delete(selected); return null; }, unused -> {
             root.setDisable(false);
             busy = false;
-            int index = courses.indexOf(selected);
-            selectingCourse = true;
             courses.remove(selected);
             scenarios = scenarios.stream().filter(item -> !item.courseId().equals(selected.id())).toList();
-            selectingCourse = false;
-            updateCount();
-            course = courses.isEmpty() ? null : courses.get(Math.min(index, courses.size() - 1));
-            selectInSidebar(course);
-            showCourse(null);
+            course = null;
+            viewedSemester = selected.academic().semesterId();
+            showDashboard();
         }, message -> {
             root.setDisable(false);
             busy = false;
@@ -868,15 +910,13 @@ public final class WhatIfApp extends Application {
         runIo(() -> { store.save(expected, draft); return draft; }, saved -> {
             busy = false;
             root.setDisable(false);
-            selectingCourse = true;
             if (expected == null) courses.add(saved);
             else courses.set(courses.indexOf(expected), saved);
-            selectingCourse = false;
             course = saved;
+            viewedSemester = saved.academic().semesterId();
             simulation = null;
             openedScenario = null;
-            updateCount();
-            selectInSidebar(saved);
+            updateSidebar();
             showCourse(row);
             success.run();
         }, message -> {
@@ -898,7 +938,7 @@ public final class WhatIfApp extends Application {
             boolean readable = detail != null && (detail.startsWith("Data telah berubah")
                     || detail.startsWith("Versi basis data") || detail.startsWith("Skema basis data")
                     || detail.startsWith("Basis data rusak") || detail.startsWith("Data skenario")
-                    || detail.startsWith("Data mata kuliah"));
+                    || detail.startsWith("Data mata kuliah") || detail.startsWith("Data semester"));
             boolean corrupt = cause instanceof org.sqlite.SQLiteException sqlite
                     && (sqlite.getResultCode() == org.sqlite.SQLiteErrorCode.SQLITE_CORRUPT
                         || sqlite.getResultCode() == org.sqlite.SQLiteErrorCode.SQLITE_NOTADB);
@@ -993,8 +1033,6 @@ public final class WhatIfApp extends Application {
         if (action != null) Platform.runLater(action::requestFocus);
     }
 
-    private void updateCount() { courseCount.setText(Integer.toString(courses.size())); }
-
     private UUID selectedRowId() {
         if (table == null) return null;
         ViewRow row = table.getSelectionModel().getSelectedItem();
@@ -1022,7 +1060,7 @@ public final class WhatIfApp extends Application {
         return label;
     }
 
-    private static Button button(String text, Runnable action) {
+    static Button button(String text, Runnable action) {
         Button button = new Button(text);
         button.setOnAction(event -> action.run());
         return button;
@@ -1040,7 +1078,7 @@ public final class WhatIfApp extends Application {
         return result;
     }
 
-    private record Workspace(List<Course> courses, List<Scenario> scenarios) {}
+    private record Workspace(List<Course> courses, List<Scenario> scenarios, CourseStore.SemesterSelection terms) {}
 
     private record ViewRow(UUID id, String name, String category, String maximum, String entered, String required,
                            String status, boolean excluded, boolean restorable) {}

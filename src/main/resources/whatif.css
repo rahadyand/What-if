@@ -220,3 +220,32 @@
     -fx-background-color: white;
     -fx-border-color: -what-line;
 }
+
+.dashboard-scroll, .dashboard-scroll > .viewport,
+.course-form-scroll, .course-form-scroll > .viewport { -fx-background-color: white; }
+.dashboard-scroll, .course-form-scroll { -fx-padding: 0; }
+.course-form-scroll > .viewport > .vbox { -fx-padding: 0 8 0 1; }
+.semester-navigation, .semester-navigation > .viewport { -fx-background-color: -what-side; }
+.semester-navigation { -fx-padding: 0 1; }
+.academic-nav, .semester-disclosure {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 5 7;
+    -fx-text-fill: -what-hover;
+}
+.academic-nav.dashboard-nav { -fx-font-weight: bold; -fx-padding: 8 10; }
+.academic-nav.sidebar-add { -fx-border-color: #CEC0B2; }
+.academic-nav.nav-current { -fx-background-color: -what-soft; -fx-font-weight: bold; }
+.semester-disclosure { -fx-padding: 2 4; -fx-font-size: 14px; }
+.semester-entries { -fx-padding: 0 0 0 14; }
+.semester-add-course { -fx-font-size: 12px; -fx-font-weight: bold; }
+
+.dashboard-welcome { -fx-padding: 5 0 12; }
+.dashboard-empty, .dashboard-course {
+    -fx-background-color: -what-side;
+    -fx-background-radius: 7;
+    -fx-border-color: -what-line;
+    -fx-border-radius: 7;
+    -fx-padding: 11 13;
+}
+.dashboard-empty { -fx-padding: 19; }

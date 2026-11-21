@@ -66,7 +66,7 @@ class WeightsMigrationTest {
         CourseStore store = new CourseStore(db);
         store.initialize();
         store.initialize();
-        assertEquals("1", scalar(db, "PRAGMA user_version"));
+        assertEquals("2", scalar(db, "PRAGMA user_version"));
         Course original = store.load().getFirst();
         assertTrue(original.legacyWeights());
         assertEquals(decimal("2"), original.categories().getFirst().weight());

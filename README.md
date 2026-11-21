@@ -22,11 +22,15 @@ $demo = Join-Path $env:TEMP ("whatif-demo-" + [guid]::NewGuid())
 .\mvnw.cmd "-Dwhatif.dataDir=$demo" javafx:run
 ```
 
+## Fondasi akademik
+
+Aplikasi terbuka di **Dashboard**. Tambah semester, pilih semester untuk melihat ringkasannya, dan gunakan **Jadikan Aktif** untuk menentukan semester startup. Dari grup semester, pilih **+ Mata kuliah** agar semester terisi otomatis. **Nilai Aktual → Pengaturan** mengubah semester, SKS, dan kehadiran. Mata kuliah dari basis data versi lama tersedia di **Belum dikelompokkan** sampai semester diisi.
+
 ## Alur tinjau
 
 1. Saat menambah mata kuliah, centang pilihan **UTS**, **UAS**, **Tugas**, **Projek**, dan **Praktikum** yang tercantum di RPS, lalu isi bobotnya. Gunakan **+ Kategori kustom** untuk kategori lain. Simpan saat total kategori aktif tepat 100%. **Kelola kategori** membuka kembali draf bobot. **Pengaturan** mengubah cara menghitung hasil di dalam kategori.
 2. Untuk contoh target, buat kategori Tugas 50%, UTS 25%, dan UAS 25%. Masukkan Tugas 80/100 dan UTS 45/100. Biarkan UAS 100 tanpa skor. Nama seperti `UTS` atau `Project Akhir` dapat menyarankan kategori aktif. Anda tetap dapat memilih kategori lain. Untuk menonaktifkan kategori yang berisi penilaian, pindahkan setiap penilaian ke kategori aktif lain dari Nilai Aktual. Nilai sementara adalah sekitar 68,33%, kontribusinya 51,25 poin persentase, dan bobot terwakili 75%.
-3. Buka **What If** dengan target 85%. Aplikasi menunjukkan **Tidak dapat dicapai dalam batas normal**. Kolom **Diperlukan** menampilkan `100 (+35 bonus)`. Gulir ke **Ringkasan Target Nilai** untuk melihat kebutuhan matematis 135/100, kekurangan 8,75 poin persentase, maksimum 76,25% (B+), dan kebutuhan untuk tiap huruf. Bonus hanya berlaku jika dosen mengizinkannya.
+3. Buka **What If** dengan target 85%. Aplikasi menunjukkan **Tidak dapat dicapai dalam batas normal**. Kolom **Diperlukan** menampilkan `100/100 · Maksimum`. Gulir ke **Ringkasan Target Nilai** untuk melihat kekurangan 8,75 poin persentase, nilai akhir tertinggi 76,25% (B+), dan skor untuk tiap huruf.
 4. Klik **Simpan Simulasi**. Untuk skenario baru, terima saran nama berdasarkan target, seperti `Target A-` atau `Target 84,5%`, atau ganti dengan nama pilihan Anda. Buat variasi melalui **Opsi → Simpan sebagai salinan** dan buka kembali dari pemilih skenario. Gunakan **Bandingkan dua skenario tersimpan** di ringkasan untuk melihat prediksi tanpa beralih dari draf. **Opsi → Bandingkan skenario** menampilkan perbandingan lebih detail.
 5. Ubah satu nilai aktual, lalu buka skenario tadi. Status **Data dasar lama** menunjukkan bahwa skenario masih menggunakan salinan historis. **Opsi → Lihat data dasar** menampilkan isi dasarnya. **Opsi → Tinjau data aktual terbaru** memperbarui draf setelah Anda menyetujui tinjauannya. Simpan untuk mengganti versi skenario.
 6. Ubah nama mata kuliah melalui **Pengaturan**. Baris di sidebar langsung mengikuti nama baru dan skenario tetap memakai data dasarnya. Pada perpindahan, pilih **Simpan Simulasi**, **Buang Perubahan**, atau **Batal** jika draf berubah. **Atur ulang** mengembalikan skenario tersimpan ke versi terakhir. Pada draf baru, tindakan ini mengembalikan penilaian dasar dan target 85%.
@@ -35,12 +39,13 @@ Untuk data lama, tutup aplikasi dan cadangkan berkas SQLite beserta berkas penda
 
 ## Dokumen proyek
 
+- [Fondasi Akademik, peta OOP, dan keputusan Tahap 2](docs/tahap-akademik.md)
 - [Perubahan What If](docs/perubahan-what-if.md)
 - [Kebijakan perhitungan dan peta OOP](docs/desain.md)
 - [Hasil verifikasi dan tangkapan layar](docs/verifikasi.md)
 - [Atribusi dan lisensi](docs/atribusi.md)
 - [Build dan peninjauan app-image Windows](docs/kemas-windows.md)
 
-## Di luar cakupan versi pertama
+## Di luar cakupan Tahap 1
 
-Akun, dashboard, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, tanggal, catatan, skala kustom, pembulatan alternatif, Pass/Fail, presensi, nilai huruf langsung, override hasil akhir, ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, SKS, IP semester, IPK, serta installer dan publikasi GitHub Release.
+Akun, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, tanggal, catatan, skala kustom, pembulatan alternatif, Pass/Fail, aturan penilaian berdasarkan kehadiran, nilai huruf langsung, override hasil akhir, ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, IP semester, IPK, serta installer dan publikasi GitHub Release.

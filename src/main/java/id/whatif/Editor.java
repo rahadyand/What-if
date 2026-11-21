@@ -12,12 +12,15 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
@@ -30,28 +33,82 @@ import java.util.function.Supplier;
 final class Editor {
     private Editor() {}
 
-    static void course(Window owner, Course previous, Consumer<Boolean> invalid, Save<Course> save) {
+    static void course(Window owner, Course previous, List<Semester> semesters, UUID initialSemester,
+                       Consumer<Boolean> invalid, Save<Course> save) {
         TextField name = text(previous == null ? "" : previous.name(), "Contoh: Pemrograman Berorientasi Objek");
+        AcademicDetails current = previous == null ? AcademicDetails.EMPTY : previous.academic();
+        ComboBox<Semester> semester = new ComboBox<>();
+        semester.getItems().setAll(semesters);
+        semester.setPromptText(previous == null ? "Pilih semester" : AcademicDetails.UNGROUPED);
+        UUID semesterId = previous == null ? initialSemester : current.semesterId();
+        semesters.stream().filter(item -> item.id().equals(semesterId)).findFirst().ifPresent(semester::setValue);
+        semester.setMinWidth(0);
+        TextField sks = wholeField(current.sks());
+        TextField present = wholeField(current.present());
+        TextField meetings = wholeField(current.meetings());
+        VBox semesterField = field("Semester", semester);
+        VBox sksField = field("SKS (opsional)", sks);
+        HBox placement = fieldPair(semesterField, sksField);
+        semesterField.setPrefWidth(245);
+        sksField.setPrefWidth(125);
         ComboBox<Aggregation> method = new ComboBox<>();
         method.getItems().setAll(Aggregation.values());
         method.setTooltip(new Tooltip(Aggregation.EXAMPLE));
         method.setValue(previous == null ? Aggregation.TOTAL_POINTS : previous.method());
-        VBox content = new VBox(10, field("Nama mata kuliah", name), field("Metode per kategori", method));
+        VBox content = new VBox(9, field("Nama mata kuliah", name), placement,
+                fieldPair(field("Jumlah hadir", present), field("Pertemuan terlaksana", meetings)),
+                note("Kehadiran opsional. Isi kedua angka atau kosongkan keduanya.", "muted"),
+                field("Metode per kategori", method));
+        Supplier<AcademicDetails> readAcademic = () -> {
+            Semester selected = semester.getValue();
+            if (previous == null && selected == null) throw new IllegalArgumentException("Pilih semester untuk mata kuliah baru.");
+            return AcademicDetails.read(selected == null ? null : selected.id(), sks.getText(), present.getText(), meetings.getText());
+        };
         if (previous != null) {
             content.getChildren().add(note(Aggregation.EXAMPLE, "muted"));
             show(owner, "Pengaturan mata kuliah", "Simpan", content,
-                    () -> previous.withSettings(name.getText(), method.getValue()), save, invalid, name,
-                    name.textProperty(), method.valueProperty());
+                    () -> previous.withSettings(name.getText(), method.getValue()).withAcademic(readAcademic.get()), save, invalid, name,
+                    name.textProperty(), method.valueProperty(), semester.valueProperty(), sks.textProperty(),
+                    present.textProperty(), meetings.textProperty());
             return;
         }
 
         var categories = new CategoryEditor(null);
         Label heading = note("Kategori dan bobot", "field-label");
         content.getChildren().addAll(heading, categories.content());
-        show(owner, "Tambah mata kuliah", "Simpan", content, () -> {
+        ScrollPane scroll = new ScrollPane(content);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setPrefViewportHeight(390);
+        scroll.getStyleClass().add("course-form-scroll");
+        show(owner, "Tambah mata kuliah", "Simpan", new VBox(scroll), () -> {
+            var academic = readAcademic.get();
             var selected = categories.readCategories();
-            return Course.create(name.getText(), method.getValue(), selected);
-        }, save, invalid, name, name.textProperty(), method.valueProperty(), categories.changes());
+            return Course.create(name.getText(), method.getValue(), selected).withAcademic(academic);
+        }, save, invalid, name, name.textProperty(), method.valueProperty(), semester.valueProperty(), sks.textProperty(),
+                present.textProperty(), meetings.textProperty(), categories.changes());
+    }
+
+    static void semester(Window owner, Semester previous, Save<Semester> save) {
+        UUID id = previous == null ? UUID.randomUUID() : previous.id();
+        TextField label = text(previous == null ? "" : previous.label(), "Contoh: 3 atau Semester Antara");
+        TextField year = text(previous == null ? "" : previous.academicYear(), "Contoh: 2025/2026");
+        VBox content = new VBox(10, field("Nomor atau label semester", label), field("Tahun ajaran (opsional)", year));
+        show(owner, previous == null ? "Tambah semester" : "Edit semester", "Simpan", content,
+                () -> new Semester(id, label.getText(), year.getText()), save, ignored -> {}, label,
+                label.textProperty(), year.textProperty());
+    }
+
+    private static TextField wholeField(Integer value) { return text(value == null ? "" : value.toString(), "Opsional"); }
+
+    private static HBox fieldPair(VBox first, VBox second) {
+        HBox pair = new HBox(10, first, second);
+        for (VBox field : List.of(first, second)) {
+            field.setMinWidth(0);
+            field.setPrefWidth(185);
+            HBox.setHgrow(field, Priority.ALWAYS);
+        }
+        return pair;
     }
 
     static void assessment(Window owner, Course course, Assessment previous, Simulation.Row row,

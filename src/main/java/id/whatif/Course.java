@@ -7,11 +7,16 @@ import java.util.Objects;
 import java.util.UUID;
 
 record Course(UUID id, String name, Aggregation method, List<Category> categories, List<Assessment> assessments,
-              boolean legacyWeights) {
+              boolean legacyWeights, AcademicDetails academic) {
     static final BigDecimal FULL_WEIGHT = BigDecimal.valueOf(100);
 
     Course(UUID id, String name, Aggregation method, List<Category> categories, List<Assessment> assessments) {
         this(id, name, method, categories, assessments, false);
+    }
+
+    Course(UUID id, String name, Aggregation method, List<Category> categories, List<Assessment> assessments,
+           boolean legacyWeights) {
+        this(id, name, method, categories, assessments, legacyWeights, AcademicDetails.EMPTY);
     }
 
     static BigDecimal totalWeight(List<Category> categories) {
@@ -22,6 +27,7 @@ record Course(UUID id, String name, Aggregation method, List<Category> categorie
         Objects.requireNonNull(id);
         name = requiredName(name, "Nama mata kuliah");
         Objects.requireNonNull(method);
+        Objects.requireNonNull(academic);
         categories = List.copyOf(categories);
         assessments = List.copyOf(assessments);
 
@@ -51,15 +57,19 @@ record Course(UUID id, String name, Aggregation method, List<Category> categorie
     }
 
     Course withSettings(String name, Aggregation method) {
-        return new Course(id, name, method, categories, assessments, legacyWeights);
+        return new Course(id, name, method, categories, assessments, legacyWeights, academic);
     }
 
     Course withCategories(List<Category> categories) {
-        return new Course(id, name, method, categories, assessments);
+        return new Course(id, name, method, categories, assessments, false, academic);
     }
 
     Course withAssessments(List<Assessment> assessments) {
-        return new Course(id, name, method, categories, assessments, legacyWeights);
+        return new Course(id, name, method, categories, assessments, legacyWeights, academic);
+    }
+
+    Course withAcademic(AcademicDetails details) {
+        return academic.equals(details) ? this : new Course(id, name, method, categories, assessments, legacyWeights, details);
     }
 
     boolean sameGradeInputs(Course other) {

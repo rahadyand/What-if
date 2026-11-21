@@ -134,3 +134,21 @@ Aplikasi JavaFX dijalankan pada Linux dengan basis data demo terisolasi. Tiga ba
 
 - [Target A dan A−, dengan Ringkasan dan Diperlukan pada layar yang sama](screenshots/35-batas-maksimum-dan-minimum.png)
 - [Skenario dengan batas 40/40 pada 960 × 650](screenshots/36-batas-40-poin-960x650.png)
+
+## Tahap 1 — Fondasi Akademik
+
+Maven `clean verify` pada Java 21 lulus dengan 40 tes. Cakupan mencakup migrasi SQLite dari skema lama, pengembalian transaksi pada migrasi yang gagal, SKS di atas 6, validasi kedua angka kehadiran, dan pemindahan mata kuliah. Tes migrasi versi 1 memeriksa bahwa versi 2 memuat data akademik lama sebagai kosong serta mempertahankan ID, bobot, nilai aktual, dan byte snapshot skenario.
+
+Aplikasi JavaFX diperiksa pada Linux menggunakan dua basis data terisolasi. Basis data kosong membuka Dashboard dan menampilkan tindakan untuk membuat semester. Dua semester dibuat, satu diedit dan dijadikan aktif, lalu semester lain dibuka via keyboard tanpa mengganti semester aktif. Grup dilipat dan dibuka kembali via keyboard. Form **Tambah mata kuliah** dari grup memilih semester terkait. SKS 8 dapat disimpan, kehadiran 0/0 dan 5/6 ditampilkan sesuai data, dan formulir menolak jumlah hadir yang melebihi pertemuan.
+
+Mata kuliah dipindahkan sambil mempertahankan nilai UTS 75, kategori, dan skenario tersimpan dengan target 75. Dashboard menampilkan dua mata kuliah dengan total tercatat 8 SKS dan menandai satu mata kuliah tanpa SKS. Pintasan Nilai Aktual dan What If membuka mata kuliah yang sesuai. Pembatalan perpindahan menjaga draf What If. Setelah aplikasi dibuka ulang, semester aktif dan grupnya kembali terbuka serta data mata kuliah tetap tersedia. Tata letak diperiksa pada 1366 × 768 dan 960 × 650.
+
+Pada basis data sintetis versi 1, startup menampilkan **Belum dikelompokkan**. Nilai kuis lama 8,5/10 serta pengaturan mata kuliah dapat dibuka. Semester, SKS, dan kehadiran masih kosong.
+
+| Kondisi | Bukti |
+| --- | --- |
+| Startup basis data kosong | [Dashboard kosong](screenshots/37-dashboard-kosong.png) |
+| Semester aktif, total, dan pintasan | [Dashboard 1366 × 768](screenshots/38-dashboard-semester-aktif.png) |
+| Pemindahan semester, SKS, dan kehadiran | [Pengaturan mata kuliah](screenshots/39-pengaturan-sks-dan-kehadiran.png) |
+| Startup ulang dengan semester aktif | [Dashboard 960 × 650](screenshots/40-dashboard-960x650.png) |
+| Startup setelah migrasi skema 1 | [Belum dikelompokkan](screenshots/41-dashboard-migrasi.png) |
