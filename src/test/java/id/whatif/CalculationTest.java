@@ -199,6 +199,69 @@ class CalculationTest {
         }
     }
 
+    @Test void reportsAllConfiguredThresholdsWithoutChangingSelectedTargetOrInputs() {
+        Category tasks = category("Tugas", "50");
+        Category midterm = category("UTS", "25");
+        Category finalExam = category("UAS", "25");
+        Assessment uas = row(finalExam, "100", null);
+        var simulation = new Simulation(course(Aggregation.TOTAL_POINTS, List.of(tasks, midterm, finalExam),
+                List.of(row(tasks, "100", "80"), row(midterm, "100", "45"), uas)));
+        var before = simulation.state();
+        var report = Calculation.targetReport(simulation);
+        assertEquals(before, simulation.state());
+        assertEquals(Calculation.project(simulation), report.selected());
+        assertEquals(List.of(Grade.values()), report.grades().stream().map(Calculation.GradeRequirement::grade).toList());
+        for (var entry : report.grades()) {
+            var independent = Simulation.from(before);
+            independent.chooseGrade(entry.grade());
+            assertEquals(Calculation.project(independent), entry.projection());
+        }
+        assertGradeRequirement(report, Grade.B, uas, "75.00", WITH_SUGGESTIONS);
+        assertGradeRequirement(report, Grade.B_PLUS, uas, "95.00", WITH_SUGGESTIONS);
+        assertGradeRequirement(report, Grade.A_MINUS, uas, "115.00", UNREACHABLE);
+        assertGradeRequirement(report, Grade.A, uas, "135.00", UNREACHABLE);
+        assertEquals("100 (+35 bonus)", ResultText.requiredScore(report.selected().suggestions().get(uas.id()),
+                uas.maximum(), report.selected().excess().get(uas.id())));
+        assertEquals(Exact.of(num("8.75")), report.selected().shortfall());
+
+        for (var score : List.of("80", "100")) {
+            simulation.put(new Assessment(uas.id(), uas.name(), uas.categoryId(), uas.maximum(), num(score)), true);
+            var fixed = Calculation.targetReport(simulation);
+            boolean maximum = score.equals("100");
+            assertEquals(Exact.of(num(maximum ? "76.25" : "71.25")), fixed.selected().percent());
+            assertEquals(maximum ? Grade.B_PLUS : Grade.B, Grade.classify(fixed.selected().percent()));
+            assertTrue(fixed.grades().stream().allMatch(requirement -> requirement.projection().suggestions().isEmpty()));
+            assertEquals(SECURED, fixed.grades().stream().filter(item -> item.grade() == Grade.B)
+                    .findFirst().orElseThrow().projection().status());
+        }
+    }
+
+    @Test void gradeCombinationDependsOnAllFreeAssessmentsAndExclusions() {
+        Category category = category("Umum", "100");
+        Assessment fixed = row(category, "100", "50");
+        Assessment first = row(category, "80", null);
+        Assessment second = row(category, "20", null);
+        var simulation = new Simulation(totalCourse(category, List.of(fixed, first, second)));
+        var report = Calculation.targetReport(simulation);
+        assertGradeRequirement(report, Grade.B, first, "72.00", WITH_SUGGESTIONS);
+        assertGradeRequirement(report, Grade.B, second, "18.00", WITH_SUGGESTIONS);
+        simulation.put(new Assessment(first.id(), first.name(), first.categoryId(), first.maximum(), num("72")), true);
+        simulation.put(new Assessment(second.id(), second.name(), second.categoryId(), second.maximum(), num("0")), true);
+        assertEquals(Exact.of(61), Calculation.targetReport(simulation).selected().percent());
+        simulation.setExcluded(second.id(), true);
+        assertNotEquals(report.selected().maximum(), Calculation.targetReport(simulation).selected().maximum());
+        simulation.targetInput("salah");
+        assertThrows(IllegalArgumentException.class, () -> Calculation.targetReport(simulation));
+        assertEquals("salah", simulation.targetInput());
+    }
+
+    private static void assertGradeRequirement(Calculation.TargetReport report, Grade grade, Assessment assessment,
+                                               String required, Calculation.Status status) {
+        var projection = report.grades().stream().filter(item -> item.grade() == grade).findFirst().orElseThrow().projection();
+        assertEquals(num(required), projection.suggestions().get(assessment.id()));
+        assertEquals(status, projection.status());
+    }
+
     @Test void partialAverageContributionAndRepresentedWeightAreSeparate() {
         Category midterm = category("UTS", "30");
         Category finalExam = category("UAS", "70");

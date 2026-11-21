@@ -62,6 +62,11 @@ record Course(UUID id, String name, Aggregation method, List<Category> categorie
         return new Course(id, name, method, categories, assessments, legacyWeights);
     }
 
+    boolean sameGradeInputs(Course other) {
+        return id.equals(other.id) && method == other.method && legacyWeights == other.legacyWeights
+                && categories.equals(other.categories) && assessments.equals(other.assessments);
+    }
+
     boolean categoryInUse(UUID categoryId) {
         return assessments.stream().anyMatch(row -> row.categoryId().equals(categoryId));
     }

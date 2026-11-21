@@ -78,3 +78,22 @@ Probe antarmuka JavaFX berjalan pada desktop virtual Linux dalam ukuran 1366 × 
 Probe JavaFX memakai basis data sementara di desktop virtual Linux. Pada 1366 × 768, probe menambahkan mata kuliah dengan tiga preset aktif dan satu kategori kustom, melihat kekurangan dan kelebihan bobot, lalu menyimpan pada 100%. Editor menyarankan UTS, membiarkan pilihan kosong untuk nama ambigu, nama tanpa kecocokan, atau kecocokan dengan kategori nonaktif, dan menampilkan pesan ketika pengguna memilih UAS. Skor 80/100 pada kategori UAS berbobot 30% menyumbang 24 poin persentase di Nilai Aktual. What If juga menghitung batas 24% pada konfigurasi yang sama. Probe memeriksa saran penilaian hipotetis, penjelasan metode rata-rata persentase, pilihan manual saat nama diubah, pemblokiran penonaktifan, dan data saat aplikasi dibuka lagi pada 960 × 650. Pengujian Windows native dan DPI Windows belum dilakukan untuk perubahan ini.
 
 [Editor preset dan total bobot](screenshots/19-preset-kategori.png) · [Editor penilaian dengan pilihan manual](screenshots/20-saran-kategori-konflik.png)
+
+## Ringkasan target, tabel ringkas, dan nama mata kuliah
+
+`./mvnw clean verify` lulus dengan 32 tes pada JDK 21. Fixture independen memakai Tugas 50% dengan nilai 80, UTS 25% dengan nilai 45, serta UAS 25% dengan maksimum 100.
+
+| Pemeriksaan | Hasil |
+| --- | --- |
+| UAS 80/100 | 71,25% (B) |
+| UAS 100/100 | 76,25% (B+), maksimum dalam batas normal |
+| Target B (70%) | Perlu 75/100 |
+| Target B+ (75%) | Perlu 95/100 |
+| Target A- (80%) | Perlu 115/100 dan di luar batas normal |
+| Target A (85%) | Kolom Diperlukan menampilkan 100 (+35 bonus). Kebutuhan matematis 135/100 dan kekurangan akhir 8,75 poin persentase. |
+| Target sama dengan maksimum 76,25% | Dapat dicapai dengan 100/100 |
+| Beberapa penilaian bebas | Semua skor yang disarankan memakai satu persentase bersama sebelum pembulatan. Tes memeriksa bahwa satu skor saja dapat gagal memenuhi target. |
+
+Probe JavaFX di Linux memakai basis data sementara. Pada 1366 × 768, probe menguji ganti nama, penolakan nama kosong, kegagalan simpan yang tetap menahan isian, dan konsistensi skenario setelah buka ulang. Penilaian, kategori, dan bobot tetap terhubung ke UUID mata kuliah yang sama. Probe juga menguji bobot 99,99% yang ditolak di editor, target invalid, semua ambang dari model Grade, dan pemilihan dua alternatif di ringkasan tanpa mengganggu draf. Untuk 0, 3 dan 11 penilaian, probe memeriksa tinggi tabel terhadap header yang dirender serta batas delapan baris. Pada 960 × 650, gulir halaman mencapai ringkasan, tabel dengan 11 penilaian memiliki gulir sendiri, dan tombol Enter membuka editor penilaian terpilih. Windows native dan DPI Windows belum diuji untuk revisi ini.
+
+[Tabel dan kebutuhan bonus](screenshots/21-target-dan-tabel-ringkas.png) · [Ringkasan per huruf](screenshots/22-ringkasan-per-huruf.png) · [Perbandingan di ringkasan](screenshots/24-bandingkan-di-ringkasan.png) · [Ringkasan pada 960 × 650](screenshots/25-ringkasan-ukuran-kecil.png) · [Delapan baris terlihat dari sebelas](screenshots/26-tabel-sebelas-baris.png)

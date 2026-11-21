@@ -25,6 +25,14 @@ final class ScenarioComparison {
         Dialog<Void> dialog = Editor.dialog(owner, "Bandingkan skenario");
         dialog.getDialogPane().setPrefWidth(720);
         dialog.getDialogPane().getButtonTypes().add(new ButtonType("Tutup", ButtonData.CANCEL_CLOSE));
+        ScrollPane scroll = new ScrollPane(panel(current, scenarios, false));
+        scroll.setFitToWidth(true);
+        scroll.setPrefViewportHeight(415);
+        dialog.getDialogPane().setContent(scroll);
+        dialog.showAndWait();
+    }
+
+    static GridPane panel(Course current, List<Scenario> scenarios, boolean compact) {
         ComboBox<Scenario> first = new ComboBox<>(FXCollections.observableArrayList(scenarios));
         ComboBox<Scenario> second = new ComboBox<>(FXCollections.observableArrayList(scenarios));
         GridPane grid = new GridPane();
@@ -32,17 +40,15 @@ final class ScenarioComparison {
         grid.setVgap(8);
         grid.setPadding(new Insets(6));
         grid.getColumnConstraints().addAll(new ColumnConstraints(138), flexibleColumn(), flexibleColumn());
-        ScrollPane scroll = new ScrollPane(grid);
-        scroll.setFitToWidth(true);
-        scroll.setPrefViewportHeight(415);
-        dialog.getDialogPane().setContent(scroll);
-        Runnable update = () -> render(grid, current, first, second);
-        first.setOnAction(event -> update.run());
-        second.setOnAction(event -> update.run());
+        grid.add(Editor.field("Skenario pertama", first), 1, 0);
+        grid.add(Editor.field("Skenario kedua", second), 2, 0);
+        Runnable update = () -> render(grid, current, first, second, compact);
+        first.valueProperty().addListener(unused -> update.run());
+        second.valueProperty().addListener(unused -> update.run());
         first.getSelectionModel().select(0);
         second.getSelectionModel().select(1);
         update.run();
-        dialog.showAndWait();
+        return grid;
     }
 
     private static ColumnConstraints flexibleColumn() {
@@ -51,13 +57,12 @@ final class ScenarioComparison {
         return column;
     }
 
-    private static void render(GridPane grid, Course current, ComboBox<Scenario> first, ComboBox<Scenario> second) {
+    private static void render(GridPane grid, Course current, ComboBox<Scenario> first, ComboBox<Scenario> second,
+                               boolean compact) {
         Scenario a = first.getValue();
         Scenario b = second.getValue();
         if (a == null || b == null) return;
-        grid.getChildren().clear();
-        grid.add(Editor.field("Skenario pertama", first), 1, 0);
-        grid.add(Editor.field("Skenario kedua", second), 2, 0);
+        grid.getChildren().removeIf(node -> GridPane.getRowIndex(node) != 0);
         Simulation left = Simulation.from(a.state());
         Simulation right = Simulation.from(b.state());
         Calculation.Projection p = Calculation.project(left);
@@ -67,11 +72,12 @@ final class ScenarioComparison {
         row(grid, "Maksimum normal", ResultText.percent(p.maximum()), ResultText.percent(q.maximum()), 3);
         row(grid, "Kekurangan target", gap(p), gap(q), 4);
         row(grid, "Kelayakan", status(p), status(q), 5);
-        row(grid, "Data dasar", configuration(a, current), configuration(b, current), 6);
+        row(grid, "Data dasar", configuration(a, current, compact), configuration(b, current, compact), 6);
         String warning = a.equals(b) ? "Pilih dua skenario berbeda untuk membandingkan."
-                : a.state().baseline().equals(b.state().baseline()) ? "Data dasar kedua skenario sama."
+                : a.state().baseline().sameGradeInputs(b.state().baseline()) ? "Data dasar kedua skenario sama."
                 : "Data dasar kedua skenario berbeda. Nilai, struktur, atau aturan penilaian dapat memengaruhi selisih.";
         grid.add(Editor.note(warning, "field-label"), 0, 7, 3, 1);
+        if (compact) return;
         Map<UUID, Simulation.Row> leftRows = rows(left);
         Map<UUID, Simulation.Row> rightRows = rows(right);
         var ids = new LinkedHashSet<>(leftRows.keySet());
@@ -123,9 +129,10 @@ final class ScenarioComparison {
                 : "\nBersyarat: " + String.join(", ", projection.aboveMaximumAssumptions()) + " melewati maksimum.");
     }
 
-    private static String configuration(Scenario scenario, Course current) {
+    private static String configuration(Scenario scenario, Course current, boolean compact) {
         Course baseline = scenario.state().baseline();
         StringBuilder text = new StringBuilder(scenario.stale(current) ? "Berdasarkan data lama" : "Sesuai data aktual");
+        if (compact) return text.toString();
         text.append("\n").append(baseline.method());
         if (baseline.legacyWeights()) text.append(" · bobot relatif lama");
         for (var category : baseline.categories()) {

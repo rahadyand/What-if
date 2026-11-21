@@ -13,7 +13,7 @@ record Scenario(UUID id, String name, Simulation.State state) {
 
     UUID courseId() { return state.baseline().id(); }
 
-    boolean stale(Course actual) { return !state.baseline().equals(actual); }
+    boolean stale(Course actual) { return !state.baseline().sameGradeInputs(actual); }
 
     @Override public String toString() { return name; }
 }

@@ -68,6 +68,32 @@ class ScenarioStoreTest {
         assertEquals(List.of(saved, updated), restarted.loadScenarios());
     }
 
+    @Test void renameKeepsAssessmentIdsAndSavedScenarioFreshAfterRestart() throws Exception {
+        Path db = directory.resolve("rename.sqlite3");
+        var store = new CourseStore(db);
+        store.initialize();
+        Course original = sample("Algoritma");
+        store.save(null, original);
+        Scenario saved = scenario("Target saya", new Simulation(original));
+        store.saveScenario(null, saved);
+        assertThrows(IllegalArgumentException.class, () -> original.withSettings("  ", original.method()));
+        Course renamed = original.withSettings("  Algoritma Lanjut  ", original.method());
+        store.save(original, renamed);
+
+        var restarted = new CourseStore(db);
+        restarted.initialize();
+        Course loaded = restarted.load().getFirst();
+        Scenario reopened = restarted.loadScenarios().getFirst();
+        assertEquals("Algoritma Lanjut", loaded.name());
+        assertEquals(original.id(), loaded.id());
+        assertEquals(original.categories(), loaded.categories());
+        assertEquals(original.assessments(), loaded.assessments());
+        assertEquals(saved, reopened);
+        assertFalse(reopened.stale(loaded));
+        assertEquals(Calculation.project(new Simulation(original)), Calculation.project(new Simulation(loaded)));
+        assertTrue(reopened.stale(loaded.withSettings(loaded.name(), Aggregation.EQUAL_PERCENTAGES)));
+    }
+
     @Test void rebaseMergesByIdReportsInvalidationsAndOnlyPersistsOnSave() throws Exception {
         var store = new CourseStore(directory.resolve("rebase.sqlite3"));
         store.initialize();

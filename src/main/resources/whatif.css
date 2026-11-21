@@ -193,3 +193,25 @@
 .category-toggle:focused > .box, .category-toggle:hover > .box {
     -fx-border-color: -what-accent;
 }
+
+
+.simulation-page-scroll, .simulation-page-scroll > .viewport { -fx-background-color: white; }
+.simulation-page-scroll { -fx-padding: 0; }
+.target-summary {
+    -fx-background-color: -what-side;
+    -fx-background-radius: 7;
+    -fx-border-color: -what-line;
+    -fx-border-radius: 7;
+    -fx-padding: 12 15;
+}
+.target-detail { -fx-font-size: 13px; }
+
+.target-summary > .titled-pane > .title {
+    -fx-background-color: -what-soft;
+    -fx-border-color: -what-line;
+    -fx-padding: 6 8;
+}
+.target-summary > .titled-pane > .content {
+    -fx-background-color: white;
+    -fx-border-color: -what-line;
+}

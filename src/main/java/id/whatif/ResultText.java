@@ -1,5 +1,6 @@
 package id.whatif;
 
+import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 final class ResultText {
@@ -20,11 +21,17 @@ final class ResultText {
 
     static String percent(Exact value) { return value == null ? "—" : value(value) + "%"; }
 
+    static String requiredScore(BigDecimal required, BigDecimal maximum, BigDecimal excess) {
+        if (required == null) return "—";
+        return excess == null ? Numbers.display(required)
+                : Numbers.display(maximum) + " (+" + Numbers.display(excess) + " bonus)";
+    }
+
     static String status(Calculation.Projection projection) {
         return switch (projection.status()) {
             case EMPTY -> "Belum ada hasil";
             case SECURED -> "Target sudah aman";
-            case UNREACHABLE -> "Target Tidak Dapat Dicapai";
+            case UNREACHABLE -> "Tidak dapat dicapai dalam batas normal";
             case WITH_SUGGESTIONS -> "Target dapat dicapai";
         };
     }

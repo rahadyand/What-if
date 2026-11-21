@@ -33,12 +33,25 @@ final class Calculation {
     }
 
     static Projection project(Simulation simulation) {
-        Exact target = Exact.of(simulation.target()).divide(Exact.HUNDRED);
+        return solve(prepare(simulation), simulation.target());
+    }
+
+    static TargetReport targetReport(Simulation simulation) {
+        var inputs = prepare(simulation);
+        Projection selected = solve(inputs, simulation.target());
+        List<GradeRequirement> grades = new ArrayList<>();
+        for (Grade grade : Grade.values()) {
+            grades.add(new GradeRequirement(grade, solve(inputs, grade.boundary)));
+        }
+        return new TargetReport(selected, List.copyOf(grades));
+    }
+
+    private static ProjectionInputs prepare(Simulation simulation) {
         Course course = simulation.baseline();
         List<Simulation.Row> included = simulation.rows().stream().filter(row -> !row.excluded()).toList();
         List<Group> groups = groups(course, included.stream().map(Simulation.Row::value).toList());
         if (groups.isEmpty()) {
-            return new Projection(null, null, null, null, null, Map.of(), Map.of(), List.of(), Exact.ZERO, Status.EMPTY);
+            return new ProjectionInputs(List.of(), List.of(), Exact.ZERO, Exact.ZERO, List.of(), Exact.ZERO);
         }
 
         Exact includedWeight = groups.stream().map(group -> Exact.of(group.category().weight()))
@@ -54,6 +67,21 @@ final class Calculation {
         Exact fixed = evaluate(terms, Map.of());
         List<Term> free = terms.stream().filter(term -> term.row().earned() == null).toList();
         Exact freeShare = free.stream().map(Term::share).reduce(Exact.ZERO, Exact::add);
+        List<String> aboveMaximumAssumptions = included.stream().filter(Simulation.Row::assumption)
+                .map(Simulation.Row::value).filter(row -> row.earned().compareTo(row.maximum()) > 0)
+                .map(Assessment::name).toList();
+        return new ProjectionInputs(terms, free, fixed, freeShare, aboveMaximumAssumptions,
+                includedWeight.divide(totalWeight).multiply(Exact.HUNDRED));
+    }
+
+    private static Projection solve(ProjectionInputs inputs, BigDecimal targetPercent) {
+        if (inputs.terms().isEmpty()) {
+            return new Projection(null, null, null, null, null, Map.of(), Map.of(), List.of(), Exact.ZERO, Status.EMPTY);
+        }
+        Exact target = Exact.of(targetPercent).divide(Exact.HUNDRED);
+        Exact fixed = inputs.fixed();
+        Exact freeShare = inputs.freeShare();
+        List<Term> free = inputs.free();
         Exact maximum = fixed.add(freeShare);
         boolean unreachable = target.compareTo(maximum) > 0;
         boolean secured = target.compareTo(fixed) <= 0;
@@ -69,13 +97,11 @@ final class Calculation {
             suggestions.put(row.id(), earned);
             if (earned.compareTo(row.maximum()) > 0) excess.put(row.id(), earned.subtract(row.maximum()));
         }
-        List<String> aboveMaximumAssumptions = included.stream().filter(Simulation.Row::assumption)
-                .map(Simulation.Row::value).filter(row -> row.earned().compareTo(row.maximum()) > 0)
-                .map(Assessment::name).toList();
         Status status = unreachable ? Status.UNREACHABLE : secured ? Status.SECURED : Status.WITH_SUGGESTIONS;
-        return new Projection(evaluate(terms, suggestions).multiply(Exact.HUNDRED), maximum.multiply(Exact.HUNDRED),
-                gap, fixed.multiply(Exact.HUNDRED), common == null ? null : common.multiply(Exact.HUNDRED), Map.copyOf(suggestions), Map.copyOf(excess),
-                aboveMaximumAssumptions, includedWeight.divide(totalWeight).multiply(Exact.HUNDRED), status);
+        return new Projection(evaluate(inputs.terms(), suggestions).multiply(Exact.HUNDRED),
+                maximum.multiply(Exact.HUNDRED), gap, fixed.multiply(Exact.HUNDRED),
+                common == null ? null : common.multiply(Exact.HUNDRED), Map.copyOf(suggestions), Map.copyOf(excess),
+                inputs.aboveMaximumAssumptions(), inputs.represented(), status);
     }
 
     private static List<Group> groups(Course course, List<Assessment> participating) {
@@ -107,6 +133,12 @@ final class Calculation {
         }
         return result;
     }
+
+    private record ProjectionInputs(List<Term> terms, List<Term> free, Exact fixed, Exact freeShare,
+                                    List<String> aboveMaximumAssumptions, Exact represented) {}
+
+    record TargetReport(Projection selected, List<GradeRequirement> grades) {}
+    record GradeRequirement(Grade grade, Projection projection) {}
 
     private record Group(Category category, List<Term> terms) {}
     private record Term(Assessment row, Exact share) {}

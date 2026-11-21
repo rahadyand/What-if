@@ -13,6 +13,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.ButtonBar.ButtonData;
+import javafx.scene.control.skin.TableViewSkin;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
@@ -72,6 +73,7 @@ public final class WhatIfApp extends Application {
     private Label resultDetail;
     private Label tableCount;
     private TableView<ViewRow> table;
+    private TargetSummary targetSummary;
 
     public static void main(String[] arguments) { launch(arguments); }
 
@@ -237,7 +239,18 @@ public final class WhatIfApp extends Application {
             page.getChildren().add(Editor.note("Bobot relatif lama masih digunakan. Tinjau usulan konversi ke 100% di pengaturan kategori.", "validation"));
         }
         page.getChildren().addAll(summary(), assessmentArea());
-        root.setCenter(page);
+        if (simulation == null) {
+            root.setCenter(page);
+        } else {
+            targetSummary = new TargetSummary(course, courseScenarios());
+            page.getChildren().add(targetSummary);
+            ScrollPane scroll = new ScrollPane(page);
+            scroll.getStyleClass().add("simulation-page-scroll");
+            scroll.setFocusTraversable(true);
+            scroll.setFitToWidth(true);
+            scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+            root.setCenter(scroll);
+        }
         refreshResults(selectRow);
     }
 
@@ -297,7 +310,7 @@ public final class WhatIfApp extends Application {
         compare.setDisable(saved.size() < 2);
         compare.setOnAction(event -> ScenarioComparison.show(stage, course, courseScenarios()));
         MenuItem rebase = new MenuItem("Tinjau data aktual terbaru");
-        rebase.setDisable(simulation.baseline().equals(course));
+        rebase.setDisable(simulation.baseline().sameGradeInputs(course));
         rebase.setOnAction(event -> reviewBaseline());
         MenuItem inspect = new MenuItem("Lihat data dasar");
         inspect.setOnAction(event -> inspectBaseline());
@@ -349,10 +362,10 @@ public final class WhatIfApp extends Application {
     }
 
     private boolean scenarioModified() {
-        if (openedScenario == null) return simulation.modified() || !simulation.baseline().equals(course);
+        if (openedScenario == null) return simulation.modified() || !simulation.baseline().sameGradeInputs(course);
         Simulation.State original = openedScenario.state();
         var current = simulation.state();
-        if (!current.baseline().equals(original.baseline()) || !current.rows().equals(original.rows())) return true;
+        if (!current.baseline().sameGradeInputs(original.baseline()) || !current.rows().equals(original.rows())) return true;
         try {
             return simulation.target().compareTo(Numbers.read(original.target(), "Target", false, false)) != 0;
         } catch (IllegalArgumentException invalid) {
@@ -498,7 +511,12 @@ public final class WhatIfApp extends Application {
     private VBox assessmentArea() {
         table = new TableView<>();
         table.getStyleClass().add("assessments");
-        table.setFixedCellSize(simulation == null ? 38 : 34);
+        table.setFixedCellSize(simulation == null ? 38 : 32);
+        if (simulation != null) {
+            table.setMinHeight(Region.USE_PREF_SIZE);
+            table.setMaxHeight(Region.USE_PREF_SIZE);
+            table.setSkin(new CompactAssessmentSkin(table));
+        }
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         TableColumn<ViewRow, String> name = column("Penilaian", 115, 234, ViewRow::name, "row-name");
         TableColumn<ViewRow, String> category = column("Kategori", 76, 140, ViewRow::category, "");
@@ -510,8 +528,8 @@ public final class WhatIfApp extends Application {
                     column("Status", 118, 165, ViewRow::status, "row-status")));
         } else {
             table.getColumns().setAll(List.of(name, category, max, entered,
-                    column("Diperlukan", 110, 119, ViewRow::required, "numeric required"),
-                    column("Status", 141, 200, ViewRow::status, "row-status")));
+                    column("Diperlukan", 150, 166, ViewRow::required, "numeric required"),
+                    column("Status", 114, 173, ViewRow::status, "row-status")));
         }
 
         VBox placeholder = new VBox(4, label("Belum ada penilaian", "field-label"),
@@ -567,10 +585,30 @@ public final class WhatIfApp extends Application {
             actions.getChildren().addAll(exclude, restore);
         }
 
+        if (simulation != null) {
+            return new VBox(7, top, actions, table);
+        }
         VBox area = new VBox(9, top, table, actions);
         VBox.setVgrow(area, Priority.ALWAYS);
         VBox.setVgrow(table, Priority.ALWAYS);
         return area;
+    }
+
+    private static final class CompactAssessmentSkin extends TableViewSkin<ViewRow> {
+        private static final int VISIBLE_ROWS = 8;
+
+        CompactAssessmentSkin(TableView<ViewRow> table) {
+            super(table);
+            table.getItems().addListener((javafx.beans.InvalidationListener) change -> table.requestLayout());
+        }
+
+        @Override protected double computePrefHeight(double width, double top, double right,
+                                                    double bottom, double left) {
+            TableView<ViewRow> table = getSkinnable();
+            int rows = Math.min(VISIBLE_ROWS, table.getItems().size());
+            double content = rows == 0 ? 76 : rows * table.getFixedCellSize();
+            return top + getTableHeaderRow().prefHeight(-1) + content + bottom + 1;
+        }
     }
 
     private static TableColumn<ViewRow, String> column(String title, double min, double pref,
@@ -622,26 +660,30 @@ public final class WhatIfApp extends Application {
             return;
         }
 
-        String lineage = simulation.baseline().equals(course) ? "" : " · Data dasar lama";
+        String lineage = simulation.baseline().sameGradeInputs(course) ? "" : " · Data dasar lama";
         if (simulation.baseline().legacyWeights()) lineage += " · Bobot relatif lama";
         scenarioStatus.setText((scenarioModified() ? "Belum disimpan"
                 : openedScenario == null ? "Draf baru" : "Tersimpan") + lineage);
-        Calculation.Projection projection = null;
+        Calculation.TargetReport report = null;
+        String calculationError = "";
         try {
             var target = simulation.target();
             syncLetter(Grade.classify(Exact.of(target)));
             setTargetError("");
-            if (!invalidDraft) projection = Calculation.project(simulation);
+            if (!invalidDraft) report = Calculation.targetReport(simulation);
         } catch (IllegalArgumentException invalid) {
             syncLetter(null);
-            setTargetError(invalid.getMessage());
+            calculationError = invalid.getMessage();
+            setTargetError(calculationError);
         }
+        targetSummary.render(simulation, openedScenario, course, report, calculationError);
+        Calculation.Projection projection = report == null ? null : report.selected();
         Map<UUID, BigDecimal> suggestions = projection == null ? Map.of() : projection.suggestions();
         Map<UUID, BigDecimal> excess = projection == null ? Map.of() : projection.excess();
         List<ViewRow> rows = simulation.rows().stream().map(row -> simulationRow(row, suggestions, excess)).toList();
         long included = rows.stream().filter(row -> !row.excluded()).count();
         String count = included + " dari " + rows.size() + " disertakan";
-        if (!excess.isEmpty()) count += " · (+) poin skor di atas maksimum";
+        if (!excess.isEmpty()) count += " · Bonus hanya jika diizinkan dosen";
         fillTable(rows, selectRow, count);
         if (projection == null) {
             showResult("Nilai proyeksi", null, "Hasil tidak tersedia", "Perbaiki isian yang ditandai.", "warning");
@@ -698,8 +740,7 @@ public final class WhatIfApp extends Application {
                 : value.earned() == null ? "Bebas" : "Aktual";
         if (row.original() == null) status += " · Hipotetis";
         else if (row.modified()) status += " · Diubah";
-        String required = score(suggestions.get(value.id()));
-        if (excess.containsKey(value.id())) required += " (+" + Numbers.display(excess.get(value.id())) + ")";
+        String required = ResultText.requiredScore(suggestions.get(value.id()), value.maximum(), excess.get(value.id()));
         return new ViewRow(value.id(), value.name(), simulation.baseline().categoryName(value.categoryId()), Numbers.display(value.maximum()),
                 score(value.earned()), required, status, row.excluded(),
                 row.original() != null && (row.modified() || row.excluded()));
@@ -956,7 +997,7 @@ public final class WhatIfApp extends Application {
         return label;
     }
 
-    private static Label heading(String text, String css) {
+    static Label heading(String text, String css) {
         Label label = label(text, css);
         label.setStyle("-fx-font-family: '" + headingFamily + "'; -fx-font-weight: bold;");
         return label;
