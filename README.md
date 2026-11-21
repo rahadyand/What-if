@@ -24,14 +24,18 @@ $demo = Join-Path $env:TEMP ("whatif-demo-" + [guid]::NewGuid())
 
 ## Alur tinjau
 
-1. Tambahkan mata kuliah. Kategori **Umum** tersedia dengan bobot 1. Di **Pengaturan**, pilih metode agregasi. Di **Kelola kategori**, tambah kategori atau ubah bobot relatif. Untuk menghapus kategori berisi penilaian, pindahkan penilaiannya lebih dulu.
-2. Gunakan **Total poin** dan kategori **Umum** untuk kedua baris contoh berikut. Tambahkan penilaian `Kuis` dengan nilai `49,5` dari `50` dan `Ujian` dengan maksimum `100`. Biarkan nilai Ujian kosong. Hasil aktual sementara menunjukkan 99%. Gunakan **Simpan** pada setiap formulir aktual.
-3. Masuk **What If**, ketik target `82,1`. Kolom **Diperlukan** pada Ujian menunjukkan `73,65` dan nilai proyeksi menunjukkan 82,1% (A-). Ubah nama Ujian untuk melihat nilainya tetap **Bebas**.
-4. Coba buat penilaian hipotetis, ubah perlakuan nilai menjadi **Asumsi tetap**, keluarkan atau sertakan kembali baris, dan pulihkan data sumber dengan **Pulihkan aktual**. Atur ulang atau kembali ke **Nilai aktual**. Jika simulasi berubah, pilih **Batal** untuk kembali ke simulasi atau **Buang simulasi** untuk melanjutkan.
-5. Pilih baris dengan keyboard dan tekan Enter untuk membuka editor. Coba target `82,1.0` untuk melihat validasi, lalu perbaiki dengan `82.1`. Pada target yang terlalu tinggi, kolom saran tetap menampilkan skor yang diperlukan dan panel memberi tahu bahwa bonus mungkin dibutuhkan.
+1. Tambahkan mata kuliah. Kategori **Umum** dimulai pada 100%. Di **Kelola kategori**, ubah beberapa kategori dalam satu draf sampai total tepat 100%, lalu simpan. Di **Pengaturan**, pilih cara menghitung hasil di dalam kategori.
+2. Untuk contoh target, buat kategori Tugas 50%, UTS 25%, dan UAS 25%. Masukkan Tugas 80/100 dan UTS 45/100. Biarkan UAS 100 tanpa skor. Nilai sementara adalah sekitar 68,33%, kontribusinya 51,25 poin persentase, dan bobot terwakili 75%.
+3. Buka **What If** dengan target 85%. Aplikasi menampilkan **Target Tidak Dapat Dicapai**, maksimum 76,25%, kekurangan 8,75 poin persentase, dan kebutuhan UAS 135 (35 poin skor di atas maksimum).
+4. Klik **Simpan Simulasi**, beri nama, lalu buat variasi melalui **Opsi → Simpan sebagai salinan**. Buka kembali dari pemilih skenario. **Opsi → Bandingkan skenario** membandingkan dua versi yang sudah tersimpan.
+5. Ubah satu nilai aktual, lalu buka skenario tadi. Status **Data dasar lama** menunjukkan bahwa skenario masih menggunakan salinan historis. **Opsi → Lihat data dasar** menampilkan isi dasarnya. **Opsi → Tinjau data aktual terbaru** memperbarui draf setelah Anda menyetujui tinjauannya. Simpan untuk mengganti versi skenario.
+6. Pada perpindahan, pilih **Simpan Simulasi**, **Buang Perubahan**, atau **Batal** jika draf berubah. **Atur ulang** mengembalikan skenario tersimpan ke versi terakhir. Pada draf baru, tindakan ini mengembalikan penilaian dasar dan target 85%.
+
+Untuk data lama, tutup aplikasi dan cadangkan berkas SQLite beserta berkas pendamping `-wal` atau `-shm` yang masih ada sebelum membuka versi ini. Gunakan **Tinjau bobot lama** untuk melihat usulan persentase dan selisih hasil sebelum menerapkan konversi. Alur pengujian proyek memakai direktori demo terpisah.
 
 ## Dokumen proyek
 
+- [Perubahan What If](docs/perubahan-what-if.md)
 - [Kebijakan perhitungan dan peta OOP](docs/desain.md)
 - [Hasil verifikasi dan tangkapan layar](docs/verifikasi.md)
 - [Atribusi dan lisensi](docs/atribusi.md)
@@ -39,4 +43,4 @@ $demo = Join-Path $env:TEMP ("whatif-demo-" + [guid]::NewGuid())
 
 ## Di luar cakupan versi pertama
 
-Akun, dashboard, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, skenario bernama, perbandingan skenario, tanggal, catatan, skala kustom, pembulatan alternatif, Pass/Fail, presensi, nilai huruf langsung, override hasil akhir, ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, SKS, IP semester, IPK, serta installer dan publikasi GitHub Release.
+Akun, dashboard, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, tanggal, catatan, skala kustom, pembulatan alternatif, Pass/Fail, presensi, nilai huruf langsung, override hasil akhir, ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, SKS, IP semester, IPK, serta installer dan publikasi GitHub Release.

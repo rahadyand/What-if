@@ -1,4 +1,6 @@
-# Verifikasi What If 1.0
+# Verifikasi What If
+
+## Verifikasi awal versi 1.0
 
 Uji dilakukan dengan JDK 21.0.13 dan JavaFX 21.0.8 di Linux. Semua basis data pengujian terisolasi dan berisi data contoh. Peluncuran `./mvnw -Dwhatif.dataDir=… javafx:run` membuka jendela dan membuat basis data contoh pada direktori yang diberikan.
 
@@ -49,3 +51,22 @@ Arsip sumber lolos pemeriksaan ZIP. Git bundle memuat riwayat lengkap hingga `d4
 **Uji paket Linux.** Adaptasi alur yang sama untuk Linux membuat app-image dengan JDK 21 beserta ZIP, notis lisensi, dan manifest hash. Hash ZIP serta manifest berkas hasil ekstraksi cocok. Launcher hasil ekstraksi berjalan dari folder berspasi dengan `JAVA_HOME` dilepas dan PATH kosong dari executable Java maupun Maven. Uji menggunakan basis data demo terisolasi. Pada 1366 × 768, launcher membuka layar kosong, menyimpan data, memproyeksikan 82,1% dengan saran 73,65, menyembunyikan hasil untuk target ambigu, dan menampilkan kebutuhan bonus. Pengecualian, penyertaan kembali, pembatalan konfirmasi, serta penutupan dan pembukaan ulang berhasil. Setelah buka ulang, nilai Kuis tetap 49,5, nilai Ujian tetap kosong, dan target What If kembali ke 85%. Log launcher melaporkan Merriweather Bold dan System Regular. [Tangkapan layar app-image Linux](screenshots/10-linux-app-image.png)
 
 **Pemeriksaan yang tertahan.** Drive `D:` dan bukti investigasi tetap tidak terpasang. Pengujian Windows native, font Windows, DPI Windows, pembuatan Windows app-image, dan pengujian EXE hasil ekstraksi masih tertahan karena sesi ini tidak menyediakan host Windows. Langkah build dan verifikasi Windows tersedia di [panduan app-image](kemas-windows.md).
+
+## Kelayakan, persentase, dan skenario tersimpan
+
+`./mvnw clean verify` lulus dengan 26 tes JUnit pada JDK 21.0.13 dan JavaFX 21.0.8. Uji kelayakan mencakup kedua metode agregasi, batas eksak dan selisih sangat kecil, skor bonus aktual, asumsi tetap di atas maksimum, nilai bebas dengan maksimum pecahan, kategori kosong, seluruh baris dikeluarkan, dan kebutuhan 135/100 untuk target 85% dengan maksimum 76,25%. Nilai sementara 80% diuji terpisah dari kontribusi 24 poin persentase dan bobot terwakili 30%.
+
+Uji SQLite memakai basis data sementara. Uji memastikan total 99,99% dan 100,01% ditolak, draf 100% disimpan atomik, penilaian dan mata kuliah lain tetap utuh, serta konfigurasi lama dipertahankan sampai persetujuan. Skema lama diuji dengan bobot 2:1, termasuk selisih hasil akibat pembulatan. Kegagalan migrasi diuji tanpa mengubah versi atau menghapus data. Uji skenario mencakup beberapa skenario, isolasi antar mata kuliah, salinan independen, penyimpanan ulang, override dan pengecualian, penghitungan ulang, pembaruan data dasar dengan konflik, restart, serta kegagalan simpan yang dapat diulang.
+
+Probe antarmuka JavaFX berjalan pada desktop virtual Linux dalam ukuran 1366 × 768 dan 960 × 650. Probe menguji editor bobot dan validasi total, alur target tak tercapai, penyimpanan dari dialog perpindahan, kegagalan lalu percobaan ulang simpan, buka skenario, salin, bandingkan, pembatalan perpindahan skenario dan penutupan, buang perubahan, reset, baca ulang snapshot historis, pembaruan data dasar sebagai draf, dan pembukaan ulang aplikasi. Basis data demo lama diperiksa terpisah dalam mode baca saja. Merriweather Bold dan System Regular terdeteksi sebagai font judul dan isi di lingkungan uji. Uji pengguna manusia dan Windows native/DPI belum dilakukan untuk perubahan ini.
+
+| Kondisi | Tangkapan layar |
+| --- | --- |
+| Workspace kosong | [11-kosong.png](screenshots/11-kosong.png) |
+| Draf bobot 99,99% | [12-bobot-invalid.png](screenshots/12-bobot-invalid.png) |
+| Nilai sementara dan kontribusi | [13-nilai-sementara.png](screenshots/13-nilai-sementara.png) |
+| Target 85% dan maksimum 76,25% | [14-target-tidak-tercapai.png](screenshots/14-target-tidak-tercapai.png) |
+| Draf belum disimpan | [15-skenario-diubah.png](screenshots/15-skenario-diubah.png) |
+| Skenario tersimpan | [16-skenario-tersimpan.png](screenshots/16-skenario-tersimpan.png) |
+| Perbandingan skenario | [17-bandingkan.png](screenshots/17-bandingkan.png) |
+| Data dasar lama pada 960 × 650 | [18-data-dasar-lama-960x650.png](screenshots/18-data-dasar-lama-960x650.png) |

@@ -52,7 +52,7 @@ class CourseStoreTest {
         try (var connection = DriverManager.getConnection("jdbc:sqlite:" + database);
              var statement = connection.createStatement()) {
             statement.executeUpdate("""
-                    CREATE TRIGGER reject_insert BEFORE INSERT ON assessments
+                    CREATE TRIGGER reject_insert BEFORE UPDATE ON courses
                     BEGIN SELECT RAISE(ABORT, 'Uji kegagalan simpan'); END
                     """);
             assertThrows(SQLException.class, () -> store.save(original, draft));
@@ -122,8 +122,8 @@ class CourseStoreTest {
 
     private static Course example() {
         Course course = Course.create("Struktur Data", Aggregation.TOTAL_POINTS);
-        Category first = course.categories().getFirst();
-        Category second = new Category(UUID.randomUUID(), "Proyek", new BigDecimal("2.5"));
+        Category first = new Category(course.categories().getFirst().id(), "Umum", new BigDecimal("75"));
+        Category second = new Category(UUID.randomUUID(), "Proyek", new BigDecimal("25"));
         return course.withCategories(List.of(first, second)).withAssessments(List.of(
                 new Assessment(UUID.randomUUID(), "Kuis", first.id(), new BigDecimal("50"), new BigDecimal("49.5")),
                 new Assessment(UUID.randomUUID(), "Latihan", first.id(), BigDecimal.TEN, BigDecimal.ZERO),

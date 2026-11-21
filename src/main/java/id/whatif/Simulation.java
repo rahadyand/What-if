@@ -3,6 +3,8 @@ package id.whatif;
 import id.whatif.Course.Assessment;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -18,6 +20,61 @@ final class Simulation {
     Simulation(Course baseline) {
         this.baseline = Objects.requireNonNull(baseline);
         reset();
+    }
+
+    static Simulation from(State state) {
+        Simulation simulation = new Simulation(state.baseline());
+        simulation.targetInput(state.target());
+        for (Row row : state.rows()) {
+            simulation.put(row.value(), row.assumption());
+            simulation.setExcluded(row.value().id(), row.excluded());
+        }
+        return simulation;
+    }
+
+    State state() { return new State(baseline, targetInput, rows()); }
+
+    Review reviewBaseline(Course current) {
+        if (!baseline.id().equals(current.id())) throw new IllegalArgumentException("Mata kuliah berbeda.");
+        Simulation refreshed = new Simulation(current);
+        refreshed.targetInput(targetInput);
+        List<String> notes = new ArrayList<>();
+        var currentRows = new HashMap<UUID, Assessment>();
+        for (Assessment row : current.assessments()) currentRows.put(row.id(), row);
+        for (Row change : rows.values()) {
+            if (!change.modified() && !change.excluded()) continue;
+            Assessment previous = change.original();
+            Assessment edit = change.value();
+            Assessment latest = currentRows.get(edit.id());
+            if (previous != null && latest == null) {
+                notes.add(edit.name() + " — penilaian aktual dihapus. Edit dan pengecualiannya dilepas.");
+                continue;
+            }
+            boolean categoryEdited = previous == null || !edit.categoryId().equals(previous.categoryId());
+            if (categoryEdited && current.categories().stream().noneMatch(c -> c.id().equals(edit.categoryId()))) {
+                if (previous != null) refreshed.setExcluded(edit.id(), change.excluded());
+                notes.add(edit.name() + " — kategori simulasi dihapus. Edit ini dilepas.");
+                continue;
+            }
+            if (previous == null) {
+                refreshed.put(edit, change.assumption());
+            } else {
+                boolean scoreEdited = change.assumption() || !Objects.equals(edit.earned(), previous.earned());
+                boolean maximumEdited = !edit.maximum().equals(previous.maximum());
+                if ((scoreEdited || maximumEdited) && !latest.maximum().equals(previous.maximum())) {
+                    notes.add(edit.name() + " — maksimum aktual berubah. Nilai tetap/bebas dan maksimum simulasi dikembalikan ke aktual.");
+                    scoreEdited = false;
+                    maximumEdited = false;
+                }
+                refreshed.put(new Assessment(edit.id(),
+                        edit.name().equals(previous.name()) ? latest.name() : edit.name(),
+                        categoryEdited ? edit.categoryId() : latest.categoryId(),
+                        maximumEdited ? edit.maximum() : latest.maximum(),
+                        scoreEdited ? edit.earned() : latest.earned()), scoreEdited && change.assumption());
+            }
+            refreshed.setExcluded(edit.id(), change.excluded());
+        }
+        return new Review(refreshed, List.copyOf(notes));
     }
 
     Course baseline() { return baseline; }
@@ -73,6 +130,16 @@ final class Simulation {
     private static Row original(Assessment assessment) {
         return new Row(assessment, assessment, false, false);
     }
+
+    record State(Course baseline, String target, List<Row> rows) {
+        State {
+            Objects.requireNonNull(baseline);
+            Objects.requireNonNull(target);
+            rows = List.copyOf(rows);
+        }
+    }
+
+    record Review(Simulation draft, List<String> notes) {}
 
     record Row(Assessment value, Assessment original, boolean excluded, boolean assumption) {
         boolean modified() {

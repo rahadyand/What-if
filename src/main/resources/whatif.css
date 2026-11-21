@@ -50,7 +50,7 @@
     -fx-background-radius: 8;
     -fx-font-size: 12px;
 }
-.button, .toggle-button, .combo-box-base, .text-field {
+.button, .toggle-button, .menu-button, .combo-box-base, .text-field {
     -fx-background-color: white;
     -fx-background-radius: 6;
     -fx-border-color: -what-line;
@@ -58,11 +58,12 @@
     -fx-text-fill: -what-text;
     -fx-padding: 6 11;
 }
-.combo-box-base { -fx-padding: 1 3; }
+.combo-box-base, .menu-button { -fx-padding: 1 3; }
+.button.scenario-save { -fx-background-color: -what-soft; -fx-text-fill: -what-hover; -fx-font-weight: bold; }
 .combo-box > .list-cell { -fx-padding: 5 8; }
 .text-field { -fx-prompt-text-fill: -what-muted; }
-.button:hover, .toggle-button:hover, .combo-box-base:hover { -fx-background-color: #FBF8F3; -fx-border-color: #CBBBAE; }
-.button:focused, .toggle-button:focused, .combo-box-base:focused, .text-field:focused,
+.button:hover, .toggle-button:hover, .combo-box-base:hover, .menu-button:hover { -fx-background-color: #FBF8F3; -fx-border-color: #CBBBAE; }
+.button:focused, .toggle-button:focused, .combo-box-base:focused, .menu-button:focused, .text-field:focused,
 .list-view:focused, .table-view:focused {
     -fx-border-color: -what-accent;
     -fx-effect: dropshadow(gaussian, #79554845, 4, 0.32, 0, 0);

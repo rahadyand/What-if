@@ -1,7 +1,6 @@
 package id.whatif;
 
 import id.whatif.Course.Assessment;
-import id.whatif.Course.Category;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyStringWrapper;
@@ -53,6 +52,9 @@ public final class WhatIfApp extends Application {
     private CourseStore store;
     private Course course;
     private Simulation simulation;
+    private Scenario openedScenario;
+    private List<Scenario> scenarios = List.of();
+    private Label scenarioStatus;
     private boolean selectingCourse;
     private boolean syncingTarget;
     private boolean invalidDraft;
@@ -85,7 +87,7 @@ public final class WhatIfApp extends Application {
         stage.setMinWidth(880);
         stage.setMinHeight(590);
         stage.setOnCloseRequest(event -> {
-            if (busy || !confirmDiscard("Tutup What If")) event.consume();
+            if (busy || !confirmTransition("Tutup What If")) event.consume();
         });
         stage.show();
         initialize();
@@ -152,11 +154,12 @@ public final class WhatIfApp extends Application {
         showEmpty("Memuat mata kuliah…", "Membuka penyimpanan lokal.", null);
         runIo(() -> {
             store.initialize();
-            return store.load();
+            return new Workspace(store.load(), store.loadScenarios());
         }, loaded -> {
             busy = false;
             addCourse.setDisable(false);
-            courses.setAll(loaded);
+            courses.setAll(loaded.courses());
+            scenarios = loaded.scenarios();
             updateCount();
             if (courses.isEmpty()) showCourse(null);
             else courseList.getSelectionModel().selectFirst();
@@ -169,12 +172,14 @@ public final class WhatIfApp extends Application {
 
     private void selectCourse(Course next) {
         if (selectingCourse || next == course) return;
-        if (!confirmDiscard("Ganti mata kuliah")) {
+        if (!confirmTransition("Ganti mata kuliah")) {
             selectInSidebar(course);
             return;
         }
         course = next;
+        selectInSidebar(course);
         simulation = null;
+        openedScenario = null;
         invalidDraft = false;
         showCourse(null);
     }
@@ -215,18 +220,21 @@ public final class WhatIfApp extends Application {
         HBox tabs = new HBox(6, actual, whatIf);
         tabs.getStyleClass().add("mode-tabs");
 
-        Label method = label("Metode · " + course.method(), "muted");
+        Course calculationCourse = simulation == null ? course : simulation.baseline();
+        Label method = label("Dalam kategori · " + calculationCourse.method(), "muted");
         method.setTooltip(new Tooltip(Aggregation.EXAMPLE));
-        Button categories = button("Kelola kategori", this::manageCategories);
+        Button categories = button(course.legacyWeights() ? "Tinjau bobot lama" : "Kelola kategori", this::manageCategories);
         categories.setVisible(simulation == null);
         categories.setManaged(categories.isVisible());
         HBox navigation = new HBox(12, tabs, spacer(), method, categories);
         navigation.setAlignment(Pos.CENTER_LEFT);
 
-        VBox page = new VBox(14, top, navigation);
+        VBox page = new VBox(simulation == null ? 14 : 10, top, navigation);
         page.getStyleClass().add("page");
         if (simulation != null) {
-            page.getChildren().add(targetControls());
+            page.getChildren().addAll(scenarioControls(), targetControls());
+        } else if (course.legacyWeights()) {
+            page.getChildren().add(Editor.note("Bobot relatif lama masih digunakan. Tinjau usulan konversi ke 100% di pengaturan kategori.", "validation"));
         }
         page.getChildren().addAll(summary(), assessmentArea());
         root.setCenter(page);
@@ -243,16 +251,167 @@ public final class WhatIfApp extends Application {
                 tab.setSelected(true);
                 return;
             }
-            if (!enter && !confirmDiscard("Keluar dari What If")) {
+            if (!enter && !confirmTransition("Keluar dari What If")) {
                 group.getToggles().getLast().setSelected(true);
                 return;
             }
             simulation = enter ? new Simulation(course) : null;
+            openedScenario = null;
             showCourse(null);
             if (enter) targetField.requestFocus();
             else table.requestFocus();
         });
         return tab;
+    }
+
+    private HBox scenarioControls() {
+        List<Scenario> saved = courseScenarios();
+        ComboBox<Scenario> picker = new ComboBox<>(FXCollections.observableArrayList(saved));
+        picker.setPromptText("Buka skenario…");
+        picker.setAccessibleText("Buka skenario tersimpan");
+        picker.setPrefWidth(175);
+        picker.setValue(openedScenario);
+        picker.setCellFactory(unused -> new ListCell<>() {
+            @Override protected void updateItem(Scenario item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.name() + (item.stale(course) ? " · data lama" : ""));
+            }
+        });
+        picker.valueProperty().addListener((unused, before, next) -> {
+            if (next == null || next.equals(openedScenario)) return;
+            if (!confirmTransition("Buka skenario lain")) {
+                Platform.runLater(() -> picker.setValue(openedScenario));
+                return;
+            }
+            openScenario(next);
+        });
+        Button add = button("Baru", () -> {
+            if (confirmTransition("Mulai skenario baru")) openScenario(null);
+        });
+        Button save = button("Simpan Simulasi", () -> saveScenario(false, true));
+        save.getStyleClass().add("scenario-save");
+        MenuButton options = new MenuButton("Opsi");
+        MenuItem copy = new MenuItem("Simpan sebagai salinan");
+        copy.setOnAction(event -> saveScenario(true, true));
+        MenuItem compare = new MenuItem("Bandingkan skenario");
+        compare.setDisable(saved.size() < 2);
+        compare.setOnAction(event -> ScenarioComparison.show(stage, course, courseScenarios()));
+        MenuItem rebase = new MenuItem("Tinjau data aktual terbaru");
+        rebase.setDisable(simulation.baseline().equals(course));
+        rebase.setOnAction(event -> reviewBaseline());
+        MenuItem inspect = new MenuItem("Lihat data dasar");
+        inspect.setOnAction(event -> inspectBaseline());
+        options.getItems().setAll(copy, compare, inspect, rebase);
+        scenarioStatus = label("", "muted");
+        scenarioStatus.setWrapText(true);
+        HBox.setHgrow(scenarioStatus, Priority.ALWAYS);
+        HBox controls = new HBox(7, picker, add, save, options, scenarioStatus);
+        controls.setAlignment(Pos.CENTER_LEFT);
+        return controls;
+    }
+
+    private List<Scenario> courseScenarios() {
+        return scenarios.stream().filter(saved -> saved.courseId().equals(course.id())).toList();
+    }
+
+    private void openScenario(Scenario saved) {
+        openedScenario = saved;
+        simulation = saved == null ? new Simulation(course) : Simulation.from(saved.state());
+        showCourse(null);
+    }
+
+    private boolean saveScenario(boolean copy, boolean redraw) {
+        Scenario previous = copy ? null : openedScenario;
+        UUID id = previous == null ? UUID.randomUUID() : previous.id();
+        TextField name = new TextField(previous != null ? previous.name()
+                : copy && openedScenario != null ? openedScenario.name() + " – salinan" : "");
+        name.setPromptText("Nama skenario");
+        Simulation.State state = simulation.state();
+        var saved = new java.util.concurrent.atomic.AtomicBoolean();
+        Editor.show(stage, copy ? "Simpan sebagai salinan" : "Simpan Simulasi", "Simpan",
+                new VBox(9, Editor.field("Nama skenario", name),
+                        Editor.note("Skenario disimpan untuk mata kuliah ini. Nilai aktual tetap tersimpan terpisah.", "muted")),
+                () -> new Scenario(id, name.getText(), state), (draft, success, failure) -> {
+                    busy = true;
+                    runIo(() -> { store.saveScenario(previous, draft); return draft; }, result -> {
+                        busy = false;
+                        scenarios = replace(scenarios, item -> item.id().equals(id), result);
+                        openedScenario = result;
+                        saved.set(true);
+                        success.run();
+                    }, message -> {
+                        busy = false;
+                        failure.accept(message);
+                    });
+                }, unused -> {}, name, name.textProperty());
+        if (redraw && saved.get()) showCourse(selectedRowId());
+        return saved.get();
+    }
+
+    private boolean scenarioModified() {
+        if (openedScenario == null) return simulation.modified() || !simulation.baseline().equals(course);
+        Simulation.State original = openedScenario.state();
+        var current = simulation.state();
+        if (!current.baseline().equals(original.baseline()) || !current.rows().equals(original.rows())) return true;
+        try {
+            return simulation.target().compareTo(Numbers.read(original.target(), "Target", false, false)) != 0;
+        } catch (IllegalArgumentException invalid) {
+            return true;
+        }
+    }
+
+    private void inspectBaseline() {
+        Course baseline = simulation.baseline();
+        StringBuilder text = new StringBuilder(calculationConfiguration(baseline));
+        text.append("\n\nPenilaian aktual pada data dasar");
+        for (Assessment assessment : baseline.assessments()) {
+            text.append("\n").append(assessment.name()).append(" · ")
+                    .append(baseline.categoryName(assessment.categoryId())).append(" · ")
+                    .append(score(assessment.earned())).append(" / ").append(Numbers.display(assessment.maximum()));
+        }
+        if (baseline.assessments().isEmpty()) text.append("\nBelum ada penilaian.");
+        Dialog<?> dialog = Editor.dialog(stage, "Data dasar skenario");
+        dialog.getDialogPane().getButtonTypes().add(new ButtonType("Tutup", ButtonData.CANCEL_CLOSE));
+        dialog.getDialogPane().setContent(detailScroll(text.toString()));
+        dialog.showAndWait();
+    }
+
+    private void reviewBaseline() {
+        var review = simulation.reviewBaseline(course);
+        String message = "Gunakan nilai, struktur, dan aturan aktual terbaru sebagai dasar draf. "
+                + "Versi tersimpan tetap berlaku sampai draf disimpan."
+                + "\n\nData dasar skenario\n" + calculationConfiguration(simulation.baseline())
+                + "\n\nData aktual terbaru\n" + calculationConfiguration(course)
+                + "\n\n" + (review.notes().isEmpty() ? "Tidak ada edit skenario yang perlu dilepas."
+                                                : String.join("\n", review.notes()));
+        ButtonType apply = new ButtonType("Perbarui draf", ButtonData.OK_DONE);
+        ButtonType cancel = new ButtonType("Batal", ButtonData.CANCEL_CLOSE);
+        Alert dialog = new Alert(Alert.AlertType.CONFIRMATION, "", cancel, apply);
+        dialog.initOwner(stage);
+        dialog.setTitle("Tinjau data dasar");
+        dialog.setHeaderText("Tinjau data dasar");
+        style(dialog.getDialogPane());
+        dialog.getDialogPane().setPrefWidth(490);
+        dialog.getDialogPane().setContent(detailScroll(message));
+        if (dialog.showAndWait().filter(apply::equals).isEmpty()) return;
+        simulation = review.draft();
+        showCourse(selectedRowId());
+    }
+
+    private static ScrollPane detailScroll(String text) {
+        var content = Editor.note(text, "muted");
+        var scroll = new ScrollPane(content);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setPrefViewportHeight(235);
+        return scroll;
+    }
+
+    private static String calculationConfiguration(Course baseline) {
+        String kind = baseline.legacyWeights() ? "Bobot relatif lama" : "Persentase kategori";
+        String weights = String.join(", ", baseline.categories().stream().map(category -> category.name()
+                + " " + Numbers.display(category.weight()) + (baseline.legacyWeights() ? "" : "%")).toList());
+        return "Metode dalam kategori: " + baseline.method() + "\n" + kind + ": " + weights;
     }
 
     private VBox targetControls() {
@@ -294,9 +453,7 @@ public final class WhatIfApp extends Application {
         HBox fields = new HBox(10, label("Target minimum", "field-label"), percentage, targetLetter, spacer(),
                 button("Atur ulang", this::resetSimulation));
         fields.setAlignment(Pos.CENTER_LEFT);
-        Label message = label("Eksperimen lokal. Perubahan What If dibuang saat sesi berakhir.", "muted");
-        message.setWrapText(true);
-        VBox region = new VBox(7, fields, targetError, message);
+        VBox region = new VBox(6, fields, targetError);
         region.getStyleClass().add("target-panel");
         return region;
     }
@@ -341,7 +498,7 @@ public final class WhatIfApp extends Application {
     private VBox assessmentArea() {
         table = new TableView<>();
         table.getStyleClass().add("assessments");
-        table.setFixedCellSize(38);
+        table.setFixedCellSize(simulation == null ? 38 : 34);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         TableColumn<ViewRow, String> name = column("Penilaian", 115, 234, ViewRow::name, "row-name");
         TableColumn<ViewRow, String> category = column("Kategori", 76, 140, ViewRow::category, "");
@@ -424,18 +581,16 @@ public final class WhatIfApp extends Application {
         column.setMinWidth(min);
         column.setPrefWidth(pref);
         column.setCellValueFactory(row -> new ReadOnlyStringWrapper(value.apply(row.getValue())));
-        if (!style.contains("numeric")) {
-            column.setCellFactory(unused -> new TableCell<>() {
-                private final Tooltip fullText = new Tooltip();
+        column.setCellFactory(unused -> new TableCell<>() {
+            private final Tooltip fullText = new Tooltip();
 
-                @Override protected void updateItem(String text, boolean empty) {
-                    super.updateItem(text, empty);
-                    setText(empty ? null : text);
-                    fullText.setText(text);
-                    setTooltip(empty ? null : fullText);
-                }
-            });
-        }
+            @Override protected void updateItem(String text, boolean empty) {
+                super.updateItem(text, empty);
+                setText(empty ? null : text);
+                fullText.setText(text);
+                setTooltip(empty ? null : fullText);
+            }
+        });
         if (!style.isBlank()) column.getStyleClass().addAll(style.split(" "));
         return column;
     }
@@ -451,14 +606,26 @@ public final class WhatIfApp extends Application {
             } else if (result.percent() == null) {
                 showResult("Nilai aktual", null, "Belum ada nilai", "Hasil muncul setelah Anda menyimpan nilai pertama.", "");
             } else if (result.partial()) {
+                String category = result.details().size() == 1 ? " " + result.details().getFirst().name() : "";
                 showResult("Nilai sementara", result.percent(), "Sebagian dinilai",
-                        "Perhitungan memakai penilaian yang sudah memiliki nilai.", "");
+                        "Kontribusi" + category + " ke nilai akhir: " + ResultText.value(result.contribution())
+                                + " poin persentase.\nBobot kategori yang sudah terwakili: "
+                                + ResultText.percent(result.represented()) + ".", "");
+                if (result.details().size() > 1) {
+                    resultDetail.setTooltip(new Tooltip(String.join("\n", result.details().stream().map(detail ->
+                            detail.name() + ": " + ResultText.value(detail.points()) + " poin persentase"
+                                    + " · bobot " + ResultText.percent(detail.weight())).toList())));
+                }
             } else {
                 showResult("Nilai aktual", result.percent(), "Lengkap", "Semua penilaian sudah memiliki nilai.", "positive");
             }
             return;
         }
 
+        String lineage = simulation.baseline().equals(course) ? "" : " · Data dasar lama";
+        if (simulation.baseline().legacyWeights()) lineage += " · Bobot relatif lama";
+        scenarioStatus.setText((scenarioModified() ? "Belum disimpan"
+                : openedScenario == null ? "Draf baru" : "Tersimpan") + lineage);
         Calculation.Projection projection = null;
         try {
             var target = simulation.target();
@@ -470,28 +637,41 @@ public final class WhatIfApp extends Application {
             setTargetError(invalid.getMessage());
         }
         Map<UUID, BigDecimal> suggestions = projection == null ? Map.of() : projection.suggestions();
-        List<ViewRow> rows = simulation.rows().stream().map(row -> simulationRow(row, suggestions)).toList();
+        Map<UUID, BigDecimal> excess = projection == null ? Map.of() : projection.excess();
+        List<ViewRow> rows = simulation.rows().stream().map(row -> simulationRow(row, suggestions, excess)).toList();
         long included = rows.stream().filter(row -> !row.excluded()).count();
-        fillTable(rows, selectRow, included + " dari " + rows.size() + " disertakan");
+        String count = included + " dari " + rows.size() + " disertakan";
+        if (!excess.isEmpty()) count += " · (+) poin skor di atas maksimum";
+        fillTable(rows, selectRow, count);
         if (projection == null) {
             showResult("Nilai proyeksi", null, "Hasil tidak tersedia", "Perbaiki isian yang ditandai.", "warning");
         } else if (projection.status() == Calculation.Status.EMPTY) {
             showResult("Nilai proyeksi", null, "Belum ada hasil", "Sertakan minimal satu penilaian untuk menghitung proyeksi.", "");
-        } else if (projection.bonus()) {
-            showResult("Nilai proyeksi", projection.percent(), "Perlu poin bonus",
-                    "Saran melampaui maksimum pada setidaknya satu baris. Bonus belum tentu tersedia.", "warning");
         } else {
-            switch (projection.status()) {
-                case SECURED -> showResult("Nilai proyeksi", projection.percent(), "Target sudah aman",
-                        projection.suggestions().isEmpty() ? "Semua penilaian yang disertakan memiliki nilai tetap."
-                                : "Nilai tetap sudah cukup. Penilaian bebas memerlukan 0 poin.", "positive");
-                case FIXED_BELOW -> showResult("Nilai proyeksi", projection.percent(), "Target belum tercapai",
-                        "Semua penilaian yang disertakan memiliki nilai tetap.", "warning");
-                case WITH_SUGGESTIONS -> showResult("Nilai proyeksi", projection.percent(), "Target tercapai dengan saran",
-                        "Saran dengan persentase yang sama adalah salah satu cara mencapai target.", "positive");
-                case EMPTY -> throw new IllegalStateException();
-            }
+            showProjection(projection);
         }
+    }
+
+    private void showProjection(Calculation.Projection projection) {
+        boolean unreachable = projection.status() == Calculation.Status.UNREACHABLE;
+        boolean conditional = !projection.aboveMaximumAssumptions().isEmpty();
+        String detail = "Target " + Numbers.display(simulation.target()) + "% · Maksimum "
+                + ResultText.percent(projection.maximum());
+        if (unreachable) {
+            detail += "\nKekurangan: " + ResultText.value(projection.shortfall()) + " poin persentase. "
+                    + (projection.excess().isEmpty() ? "Semua penilaian yang disertakan memiliki nilai tetap."
+                    : "Penilaian tersisa tidak cukup dalam batas skor normal.");
+        }
+        if (conditional) detail += "\nBersyarat: asumsi " + String.join(", ", projection.aboveMaximumAssumptions())
+                + " melewati maksimum.";
+        if (projection.represented().compareTo(Exact.HUNDRED) < 0) {
+            detail += "\nBobot disertakan: " + ResultText.percent(projection.represented())
+                    + (simulation.baseline().legacyWeights() ? " (aturan relatif lama)." : ". Bobot kategori kosong tetap tidak terwakili.");
+        }
+        showResult(unreachable ? "Maksimum dalam batas normal" : "Nilai proyeksi",
+                unreachable ? projection.maximum() : projection.percent(),
+                (conditional && !unreachable ? "Bersyarat · " : "") + ResultText.status(projection), detail,
+                unreachable || conditional ? "warning" : "positive");
     }
 
     private void syncLetter(Grade grade) {
@@ -511,15 +691,17 @@ public final class WhatIfApp extends Application {
                 score(row.earned()), NONE, row.earned() == null ? "Belum dinilai" : "Aktual", false, false);
     }
 
-    private ViewRow simulationRow(Simulation.Row row, Map<UUID, BigDecimal> suggestions) {
+    private ViewRow simulationRow(Simulation.Row row, Map<UUID, BigDecimal> suggestions, Map<UUID, BigDecimal> excess) {
         Assessment value = row.value();
         String status = row.excluded() ? "Dikeluarkan"
                 : row.assumption() ? "Asumsi tetap"
                 : value.earned() == null ? "Bebas" : "Aktual";
         if (row.original() == null) status += " · Hipotetis";
         else if (row.modified()) status += " · Diubah";
-        return new ViewRow(value.id(), value.name(), course.categoryName(value.categoryId()), Numbers.display(value.maximum()),
-                score(value.earned()), score(suggestions.get(value.id())), status, row.excluded(),
+        String required = score(suggestions.get(value.id()));
+        if (excess.containsKey(value.id())) required += " (+" + Numbers.display(excess.get(value.id())) + ")";
+        return new ViewRow(value.id(), value.name(), simulation.baseline().categoryName(value.categoryId()), Numbers.display(value.maximum()),
+                score(value.earned()), required, status, row.excluded(),
                 row.original() != null && (row.modified() || row.excluded()));
     }
 
@@ -542,80 +724,21 @@ public final class WhatIfApp extends Application {
         resultStatus.setText(status);
         resultStatus.getStyleClass().setAll("label", "result-badge");
         if (!style.isEmpty()) resultStatus.getStyleClass().add(style);
+        resultDetail.setTooltip(null);
         resultDetail.setText(detail);
     }
 
     private void editCourse(Course previous) {
-        if (previous == null && !confirmDiscard("Tambah mata kuliah")) return;
+        if (previous == null && !confirmTransition("Tambah mata kuliah")) return;
         Editor.course(stage, previous, this::invalidDraft, (draft, success, failure) ->
                 save(previous, draft, null, success, failure));
     }
 
     private void manageCategories() {
-        Dialog<Void> dialog = Editor.dialog(stage, "Kategori dan bobot");
-        dialog.getDialogPane().getButtonTypes().setAll(new ButtonType("Selesai", ButtonData.CANCEL_CLOSE));
-        ListView<Category> list = new ListView<>();
-        list.setPrefHeight(180);
-        list.getItems().setAll(course.categories());
-        list.setCellFactory(unused -> new ListCell<>() {
-            @Override protected void updateItem(Category item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty ? null : item.name() + "   ·   bobot " + Numbers.display(item.weight()));
-            }
-        });
-        Label error = Editor.note("", "validation");
-        error.setVisible(false);
-        error.managedProperty().bind(error.visibleProperty());
-        Window owner = dialog.getDialogPane().getScene().getWindow();
-        Button add = button("+ Kategori", () -> editCategory(owner, null, list));
-        Button edit = button("Ubah", () -> editCategory(owner, list.getSelectionModel().getSelectedItem(), list));
-        Button delete = button("Hapus", () -> {
-            Category selected = list.getSelectionModel().getSelectedItem();
-            if (selected == null) return;
-            if (course.assessments().stream().anyMatch(row -> row.categoryId().equals(selected.id()))) {
-                error.setText("Pindahkan penilaiannya ke kategori lain terlebih dahulu.");
-                error.setVisible(true);
-                return;
-            }
-            if (course.categories().size() == 1) {
-                error.setText("Sisakan minimal satu kategori pada mata kuliah.");
-                error.setVisible(true);
-                return;
-            }
-            if (!confirm(owner, "Hapus kategori", "Hapus kategori “" + selected.name() + "”?", "Hapus")) return;
-            Course previous = course;
-            Course next = previous.withCategories(previous.categories().stream()
-                    .filter(item -> !item.id().equals(selected.id())).toList());
-            dialog.getDialogPane().setDisable(true);
-            save(previous, next, selectedRowId(), () -> {
-                dialog.getDialogPane().setDisable(false);
-                list.getItems().setAll(course.categories());
-            }, message -> {
-                dialog.getDialogPane().setDisable(false);
-                error.setText(message);
-                error.setVisible(true);
-            });
-        });
-        edit.disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
-        delete.disableProperty().bind(edit.disableProperty());
-        list.getSelectionModel().selectedItemProperty().addListener(unused -> error.setVisible(false));
-        dialog.setOnCloseRequest(event -> { if (busy) event.consume(); });
-        dialog.getDialogPane().setContent(new VBox(12,
-                Editor.note("Bobot menentukan proporsi antar kategori yang ikut dihitung.", "muted"),
-                list, new HBox(8, add, edit, delete), error));
-        dialog.showAndWait();
-    }
-
-    private void editCategory(Window owner, Category previous, ListView<Category> list) {
-        Editor.category(owner, previous, this::invalidDraft, (draft, success, failure) -> {
-            Course expected = course;
-            Course next = expected.withCategories(replace(expected.categories(), c -> c.id().equals(draft.id()), draft));
-            save(expected, next, selectedRowId(), () -> {
-                list.getItems().setAll(course.categories());
-                list.getSelectionModel().select(draft);
-                success.run();
-            }, failure);
-        });
+        Course previous = course;
+        UUID selected = selectedRowId();
+        CategoryEditor.show(stage, previous, this::invalidDraft, (draft, success, failure) ->
+                save(previous, draft, selected, success, failure));
     }
 
     private void editAssessment(UUID id) {
@@ -629,7 +752,7 @@ public final class WhatIfApp extends Application {
             });
         } else {
             Simulation.Row row = simulation.rows().stream().filter(item -> item.value().id().equals(id)).findFirst().orElse(null);
-            Editor.assessment(stage, course, row == null ? null : row.value(), row, true, this::invalidDraft,
+            Editor.assessment(stage, simulation.baseline(), row == null ? null : row.value(), row, true, this::invalidDraft,
                     (draft, success, failure) -> {
                         simulation.put(draft.assessment(), draft.assumption());
                         refreshResults(draft.assessment().id());
@@ -650,7 +773,7 @@ public final class WhatIfApp extends Application {
     private void deleteSelectedCourse() {
         Course selected = course;
         if (!confirm(stage, "Hapus mata kuliah",
-                "Hapus “" + selected.name() + "” beserta kategori dan penilaiannya?", "Hapus mata kuliah")) return;
+                "Hapus “" + selected.name() + "” beserta kategori, penilaian, dan skenario tersimpan?", "Hapus mata kuliah")) return;
         deleteCourse(selected);
     }
 
@@ -663,6 +786,7 @@ public final class WhatIfApp extends Application {
             int index = courses.indexOf(selected);
             selectingCourse = true;
             courses.remove(selected);
+            scenarios = scenarios.stream().filter(item -> !item.courseId().equals(selected.id())).toList();
             selectingCourse = false;
             updateCount();
             course = courses.isEmpty() ? null : courses.get(Math.min(index, courses.size() - 1));
@@ -687,6 +811,7 @@ public final class WhatIfApp extends Application {
             selectingCourse = false;
             course = saved;
             simulation = null;
+            openedScenario = null;
             updateCount();
             selectInSidebar(saved);
             showCourse(row);
@@ -707,8 +832,15 @@ public final class WhatIfApp extends Application {
             Throwable cause = task.getException();
             System.err.println("What If SQLite: " + cause);
             String detail = cause.getMessage();
-            failure.accept(detail != null && detail.startsWith("Data telah berubah")
-                    ? detail : "Penyimpanan lokal belum bisa diakses. Coba lagi.");
+            boolean readable = detail != null && (detail.startsWith("Data telah berubah")
+                    || detail.startsWith("Versi basis data") || detail.startsWith("Skema basis data")
+                    || detail.startsWith("Basis data rusak") || detail.startsWith("Data skenario")
+                    || detail.startsWith("Data mata kuliah"));
+            boolean corrupt = cause instanceof org.sqlite.SQLiteException sqlite
+                    && (sqlite.getResultCode() == org.sqlite.SQLiteErrorCode.SQLITE_CORRUPT
+                        || sqlite.getResultCode() == org.sqlite.SQLiteErrorCode.SQLITE_NOTADB);
+            failure.accept(readable ? detail : corrupt ? "Basis data rusak. Pulihkan dari cadangan sebelum mencoba lagi."
+                    : "Penyimpanan lokal belum bisa diakses. Coba lagi.");
         });
         io.execute(task);
     }
@@ -733,17 +865,31 @@ public final class WhatIfApp extends Application {
     }
 
     private void resetSimulation() {
-        if (!confirmDiscard("Atur ulang simulasi")) return;
-        simulation.reset();
-        syncingTarget = true;
-        targetField.setText(simulation.targetInput());
-        syncingTarget = false;
-        refreshResults(selectedRowId());
+        String description = openedScenario == null
+                ? "Kembalikan draf ke data dasarnya dan target awal 85%?"
+                : "Kembalikan draf ke isi dan data dasar yang terakhir disimpan?";
+        if (scenarioModified() && !confirm(stage, "Atur ulang draf", description, "Atur ulang")) return;
+        if (openedScenario == null) simulation.reset();
+        else simulation = Simulation.from(openedScenario.state());
+        showCourse(selectedRowId());
     }
 
-    private boolean confirmDiscard(String title) {
-        return simulation == null || !simulation.modified()
-                || confirm(stage, title, "Perubahan simulasi sementara akan dibuang.", "Buang simulasi");
+    private boolean confirmTransition(String title) {
+        if (simulation == null || !scenarioModified()) return true;
+        ButtonType save = new ButtonType("Simpan Simulasi", ButtonData.YES);
+        ButtonType discard = new ButtonType("Buang Perubahan", ButtonData.NO);
+        ButtonType cancel = new ButtonType("Batal", ButtonData.CANCEL_CLOSE);
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION,
+                "Ada perubahan What If sejak terakhir disimpan.", cancel, discard, save);
+        alert.initOwner(stage);
+        alert.setTitle(title);
+        alert.setHeaderText(title);
+        style(alert.getDialogPane());
+        Button cancelButton = (Button) alert.getDialogPane().lookupButton(cancel);
+        cancelButton.setDefaultButton(true);
+        alert.setOnShown(event -> cancelButton.requestFocus());
+        ButtonType result = alert.showAndWait().orElse(cancel);
+        return result == discard || (result == save && saveScenario(false, false));
     }
 
     private static boolean confirm(Window owner, String title, String message, String action) {
@@ -830,6 +976,8 @@ public final class WhatIfApp extends Application {
         result.add(value);
         return result;
     }
+
+    private record Workspace(List<Course> courses, List<Scenario> scenarios) {}
 
     private record ViewRow(UUID id, String name, String category, String maximum, String entered, String required,
                            String status, boolean excluded, boolean restorable) {}

@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CalculationTest {
     @Test void totalPointsAndEqualPercentagesGiveDifferentResults() {
-        Category category = category("Umum", "1");
+        Category category = category("Umum", "100");
         List<Assessment> rows = List.of(row(category, "10", "8"), row(category, "100", "60"));
         assertEquals(Exact.of(6800).divide(Exact.of(110)), actual(totalCourse(category, rows)));
         assertEquals(Exact.of(70), actual(course(Aggregation.EQUAL_PERCENTAGES, List.of(category), rows)));
@@ -25,31 +25,31 @@ class CalculationTest {
         Category empty = category("Kosong", "1000");
         List<Assessment> rows = List.of(row(a, "100", "90"), row(b, "100", "60"),
                 row(empty, "30", null));
-        Course weighted = course(Aggregation.TOTAL_POINTS, List.of(a, b, empty), rows);
-        Course scaled = weighted.withCategories(List.of(
-                new Category(a.id(), a.name(), num("2")), new Category(b.id(), b.name(), num("1")), empty));
+        Course weighted = new Course(UUID.randomUUID(), "Bobot lama", Aggregation.TOTAL_POINTS, List.of(a, b, empty), rows, true);
+        Course scaled = new Course(weighted.id(), weighted.name(), weighted.method(), List.of(
+                new Category(a.id(), a.name(), num("2")), new Category(b.id(), b.name(), num("1")), empty), rows, true);
         assertEquals(Exact.of(80), actual(weighted));
         assertEquals(actual(weighted), actual(scaled));
         assertTrue(Calculation.actual(weighted).partial());
     }
 
     @Test void emptyAndAllUnknownHaveNoActualResultButFreeOnlyCategoryParticipates() {
-        Category a = category("Tugas", "1");
-        Category b = category("Ujian", "1");
-        Category empty = category("Kosong", "20");
+        Category a = category("Tugas", "45");
+        Category b = category("Ujian", "45");
+        Category empty = category("Kosong", "10");
         Assessment free = row(b, "100", null);
         Course unknown = course(Aggregation.TOTAL_POINTS, List.of(a, b, empty), List.of(free));
         assertNull(actual(unknown.withAssessments(List.of())));
         assertNull(actual(unknown));
-        assertEquals(num("85.00"), Calculation.project(new Simulation(unknown)).suggestions().get(free.id()));
+        assertEquals(num("188.89"), Calculation.project(new Simulation(unknown)).suggestions().get(free.id()));
 
         Course mixed = unknown.withAssessments(List.of(row(a, "100", "100"), free));
         assertEquals(Exact.HUNDRED, actual(mixed));
-        assertEquals(num("70.00"), Calculation.project(new Simulation(mixed)).suggestions().get(free.id()));
+        assertEquals(num("88.89"), Calculation.project(new Simulation(mixed)).suggestions().get(free.id()));
     }
 
     @Test void allExcludedIsEmpty() {
-        Category category = category("Umum", "1");
+        Category category = category("Umum", "100");
         Assessment known = row(category, "100", "80");
         Assessment free = row(category, "100", null);
         Simulation simulation = new Simulation(totalCourse(category, List.of(known, free)));
@@ -62,7 +62,7 @@ class CalculationTest {
     }
 
     @Test void zeroIsKnownAndBonusKeepsA() {
-        Category category = category("Umum", "1");
+        Category category = category("Umum", "100");
         Assessment zero = row(category, "100", "0");
         assertEquals(Exact.ZERO, actual(totalCourse(category, List.of(zero))));
         assertEquals(Grade.E, Grade.classify(actual(totalCourse(category, List.of(zero)))));
@@ -74,7 +74,7 @@ class CalculationTest {
     }
 
     @Test void gradeThresholdsUseExactUnroundedPercent() {
-        Category category = category("Umum", "1");
+        Category category = category("Umum", "100");
         assertEquals(Grade.A_MINUS, Grade.classify(actual(totalCourse(category, List.of(row(category, "100", "84.5"))))));
         assertEquals(Grade.A_MINUS, Grade.classify(Exact.of(num("84.9999999999999999999"))));
         for (Grade grade : Grade.values()) {
@@ -83,7 +83,7 @@ class CalculationTest {
     }
 
     @Test void targetOf821Requires7365UnderTotalPoints() {
-        Category category = category("Umum", "1");
+        Category category = category("Umum", "100");
         Assessment free = row(category, "100", null);
         Simulation simulation = new Simulation(totalCourse(category, List.of(row(category, "50", "49.5"), free)));
         simulation.targetInput("82,1");
@@ -93,8 +93,8 @@ class CalculationTest {
     }
 
     @Test void suggestionsShareAnExactPercentageBeforeCeilingAndProjectionUsesDisplayedScores() {
-        Category small = category("Kuis", "2");
-        Category large = category("Ujian", "1");
+        Category small = category("Kuis", "60");
+        Category large = category("Ujian", "40");
         Assessment fixed = row(small, "7", "3");
         Assessment freeSmall = row(small, "3", null);
         Assessment freeLarge = row(large, "9", null);
@@ -102,23 +102,23 @@ class CalculationTest {
         Simulation simulation = new Simulation(course);
         simulation.targetInput("71.23");
 
-        // Weight 2:1 and equal assessment shares give all three rows a course share of 1/3.
+        // The first category gives each row 30% of the course; the second gives its only row 40%.
         var result = Calculation.project(simulation);
-        Exact common = Exact.of(num("71.23")).multiply(Exact.of(3))
-                .subtract(Exact.of(300).divide(Exact.of(7))).divide(Exact.of(2));
+        Exact common = Exact.of(num("71.23"))
+                .subtract(Exact.of(300).divide(Exact.of(7)).multiply(Exact.of(num("0.3"))))
+                .divide(Exact.of(num("0.7")));
         assertEquals(common, result.commonPercent());
-        assertEquals(num("2.57"), result.suggestions().get(freeSmall.id()));
-        assertEquals(num("7.69"), result.suggestions().get(freeLarge.id()));
-        Exact independent = Exact.of(3).divide(Exact.of(7))
-                .add(Exact.of(num("2.57")).divide(Exact.of(3)))
-                .add(Exact.of(num("7.69")).divide(Exact.of(9)))
-                .multiply(Exact.HUNDRED).divide(Exact.of(3));
+        assertEquals(num("2.51"), result.suggestions().get(freeSmall.id()));
+        assertEquals(num("7.51"), result.suggestions().get(freeLarge.id()));
+        Exact independent = Exact.of(3).divide(Exact.of(7)).multiply(Exact.of(30))
+                .add(Exact.of(num("2.51")).divide(Exact.of(3)).multiply(Exact.of(30)))
+                .add(Exact.of(num("7.51")).divide(Exact.of(9)).multiply(Exact.of(40)));
         assertEquals(independent, result.percent());
         assertTrue(result.percent().compareTo(Exact.of(num("71.23"))) >= 0);
     }
 
     @Test void securedNoFreeAndAboveMaximumHaveDistinctOutcomes() {
-        Category category = category("Umum", "1");
+        Category category = category("Umum", "100");
         Assessment fixed = row(category, "100", "100");
         Assessment free = row(category, "100", null);
         Simulation simulation = new Simulation(totalCourse(category, List.of(fixed, free)));
@@ -128,25 +128,26 @@ class CalculationTest {
         simulation.targetInput("105.125");
         var high = Calculation.project(simulation);
         assertEquals(num("110.25"), high.suggestions().get(free.id()));
-        assertTrue(high.bonus());
+        assertEquals(UNREACHABLE, high.status());
         simulation.setExcluded(free.id(), true);
-        assertEquals(FIXED_BELOW, Calculation.project(simulation).status());
+        assertEquals(UNREACHABLE, Calculation.project(simulation).status());
         assertEquals(Exact.HUNDRED, Calculation.project(simulation).percent());
         simulation.targetInput("99");
         assertEquals(SECURED, Calculation.project(simulation).status());
         assertTrue(Calculation.project(simulation).suggestions().isEmpty());
     }
 
-    @Test void roundingPastSmallFractionalMaximumIsFlagged() {
-        Category category = category("Umum", "1");
+    @Test void ceilingUsesExactFractionalMaximumWhenNecessary() {
+        Category category = category("Umum", "100");
         Assessment free = row(category, "0.001", null);
         var result = Calculation.project(new Simulation(totalCourse(category, List.of(free))));
-        assertEquals(num("0.01"), result.suggestions().get(free.id()));
-        assertTrue(result.bonus());
+        assertEquals(num("0.001"), result.suggestions().get(free.id()));
+        assertEquals(WITH_SUGGESTIONS, result.status());
+        assertTrue(result.excess().isEmpty());
     }
 
     @Test void bothMethodsMaintainConsistencyAfterEditsAndTargetChanges() {
-        Category category = category("Umum", "1");
+        Category category = category("Umum", "100");
         Assessment fixed = row(category, "50", "49.5");
         Assessment free = row(category, "100", null);
         for (Aggregation method : Aggregation.values()) {
@@ -169,6 +170,62 @@ class CalculationTest {
             simulation.targetInput("84.5");
             assertEquals(baseline, Calculation.project(simulation));
         }
+    }
+
+    @Test void independentlyVerifiedMaximumShortfallAndRawExcess() {
+        Category tasks = category("Tugas", "50");
+        Category midterm = category("UTS", "25");
+        Category finalExam = category("UAS", "25");
+        Assessment free = row(finalExam, "100", null);
+        for (Aggregation method : Aggregation.values()) {
+            var simulation = new Simulation(course(method, List.of(tasks, midterm, finalExam),
+                    List.of(row(tasks, "100", "80"), row(midterm, "100", "45"), free)));
+            var result = Calculation.project(simulation);
+            assertEquals(UNREACHABLE, result.status());
+            assertEquals(Exact.of(num("51.25")), result.fixedContribution());
+            assertEquals(Exact.of(num("76.25")), result.maximum());
+            assertEquals(Exact.of(num("8.75")), result.shortfall());
+            assertEquals(num("135.00"), result.suggestions().get(free.id()));
+            assertEquals(0, num("35").compareTo(result.excess().get(free.id())));
+
+            simulation.targetInput("76,25");
+            var boundary = Calculation.project(simulation);
+            assertEquals(WITH_SUGGESTIONS, boundary.status());
+            assertEquals(boundary.maximum(), boundary.percent());
+            assertTrue(boundary.excess().isEmpty());
+            simulation.targetInput("76,2500000000000001");
+            assertEquals(UNREACHABLE, Calculation.project(simulation).status());
+            assertEquals("<0,000001", ResultText.value(Calculation.project(simulation).shortfall()));
+        }
+    }
+
+    @Test void partialAverageContributionAndRepresentedWeightAreSeparate() {
+        Category midterm = category("UTS", "30");
+        Category finalExam = category("UAS", "70");
+        Course course = course(Aggregation.TOTAL_POINTS, List.of(midterm, finalExam),
+                List.of(row(midterm, "100", "80")));
+        var actual = Calculation.actual(course);
+        assertTrue(actual.partial());
+        assertEquals(Exact.of(80), actual.percent());
+        assertEquals(Exact.of(24), actual.contribution());
+        assertEquals(Exact.of(30), actual.represented());
+        assertEquals(new Calculation.CategoryContribution("UTS", Exact.of(24), Exact.of(30)), actual.details().getFirst());
+        assertEquals(Exact.of(24), Calculation.project(new Simulation(course)).maximum());
+    }
+
+    @Test void recordedBonusAndHypotheticalAboveMaximumUseDistinctProvenance() {
+        Category category = category("Umum", "100");
+        Assessment actual = row(category, "100", "110");
+        Assessment missing = row(category, "100", null);
+        var simulation = new Simulation(totalCourse(category, List.of(actual, missing)));
+        assertEquals(Exact.of(105), Calculation.project(simulation).maximum());
+        assertTrue(Calculation.project(simulation).aboveMaximumAssumptions().isEmpty());
+        var hypothesis = new Assessment(missing.id(), "UAS", category.id(), num("100"), num("115"));
+        simulation.put(hypothesis, true);
+        assertEquals(List.of("UAS"), Calculation.project(simulation).aboveMaximumAssumptions());
+        assertEquals(SECURED, Calculation.project(simulation).status());
+        simulation.setExcluded(hypothesis.id(), true);
+        assertTrue(Calculation.project(simulation).aboveMaximumAssumptions().isEmpty());
     }
 
     @Test void numericInputPreservesDecimalMeaningAndRejectsAmbiguity() {

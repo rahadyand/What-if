@@ -4,9 +4,9 @@
 
 Nilai, maksimum, bobot, serta target menerima titik atau koma desimal. Masukkan digit sebelum dan sesudah tanda desimal, tanpa pemisah ribuan. Skor kosong berarti belum diketahui. Nol adalah nilai yang sah. Maksimum dan bobot harus positif. Skor bonus dapat melampaui maksimum.
 
-Perhitungan aktual mengambil penilaian yang sudah memiliki skor. Kategori tanpa skor yang diketahui dikeluarkan dari penyebut bobot. Hasil berstatus **Nilai sementara** selama sebagian penilaian masih kosong. Tanpa skor yang diketahui, panel menampilkan **Belum ada nilai**.
+Di Nilai Aktual, hanya penilaian dengan skor yang dihitung di dalam setiap kategori. Nilai sementara membagi total kontribusi kategori yang sudah dapat dihitung dengan bobot yang terwakili. Kontribusi tiap kategori terhadap nilai akhir memakai persentase kategori yang dikonfigurasi. Contoh UTS 30% dengan hasil 80% menghasilkan nilai sementara 80%, kontribusi 24 poin persentase, dan bobot terwakili 30%. Hasil tetap sementara jika ada penilaian atau bobot yang belum terwakili. Tanpa skor yang diketahui, panel menampilkan **Belum ada nilai**.
 
-Dalam satu kategori, **Total poin** memakai jumlah skor dibagi jumlah maksimum. **Rata-rata persentase** menghitung rasio tiap penilaian lalu meratakannya. Untuk 8/10 dan 60/100, hasilnya masing-masing 68/110 (sekitar 61,82%) dan 70%. Bobot kategori dinormalisasi atas kategori yang ikut dihitung. Bobot 100 dan 50 menghasilkan proporsi yang sama dengan 2 dan 1.
+Dalam satu kategori, **Total poin** memakai jumlah skor dibagi jumlah maksimum. **Rata-rata persentase** menghitung rasio tiap penilaian lalu meratakannya. Untuk 8/10 dan 60/100, hasilnya masing-masing 68/110 (sekitar 61,82%) dan 70%. Setelah menghitung nilai kategori, sistem menerapkan persentase kategori terhadap nilai akhir. Total konfigurasi baru harus tepat 100% dan setiap kategori berbobot positif. Penilaian dengan maksimum sama tetap dapat memiliki kontribusi berbeda.
 
 | Huruf | Batas bawah | Poin mata kuliah |
 | --- | ---: | ---: |
@@ -23,30 +23,35 @@ Klasifikasi huruf memakai pecahan eksak. Persentase ringkasan ditampilkan hingga
 
 ## Simulasi dan target minimum
 
-What If membuat salinan kerja dalam memori dari mata kuliah yang dipilih. Nilai aktual diketahui berawal sebagai nilai tetap. Formulir simulasi menyimpan perlakuan nilai dan input manual. Skor saran hanya hidup di hasil perhitungan sehingga mengubah nama penilaian bebas tidak membuat skornya menjadi asumsi. Baris yang dikeluarkan tetap terlihat. Pengaturan bobot dan metode selalu berasal dari data aktual. Konfirmasi buang melindungi perubahan sementara saat pindah mata kuliah, keluar, mengatur ulang, atau menutup aplikasi.
+What If membuat draf dari mata kuliah yang dipilih atau dari snapshot skenario yang dibuka. Nilai aktual berawal sebagai nilai tetap. Target huruf mengisi batas bawahnya. Input angka menyimpan digit desimal pengguna, termasuk ketika target melebihi 100%.
 
-Target huruf mengisi batas bawahnya. Input angka menyimpan digit desimal pengguna dan memperbarui huruf yang bersesuaian. Target dapat melebihi 100%.
+Dalam konfigurasi persentase, setiap penilaian yang disertakan mempunyai koefisien sebesar persentase kategori terhadap 100 dikali porsinya dalam kategori. Total poin memakai rasio maksimum penilaian terhadap total maksimum kategori. Rata-rata persentase memberi porsi sama rata. Baris yang dikeluarkan tidak ikut, dan kategori yang tidak memiliki baris tetap tidak terwakili. Persentase kategori kosong tidak dialihkan. Pada konfigurasi relatif historis, What If tetap memakai penyebut kategori peserta yang digunakan versi lama.
 
-Setiap penilaian yang disertakan mempunyai koefisien. Koefisien tersebut adalah porsi bobot kategorinya dikali porsinya di dalam kategori. Total poin memakai rasio maksimum penilaian terhadap total maksimum kategori. Rata-rata persentase memberi porsi sama rata. Pada What If, semua baris bebas yang disertakan ikut menentukan koefisien, termasuk kategori yang seluruh barisnya bebas.
-
-Dengan semua nilai dinyatakan sebagai rasio, perhitungan proyeksi mengikuti persamaan
+Dengan nilai dan target sebagai rasio, perhitungan mengikuti persamaan:
 
 ```text
-target = kontribusiTetap + porsiBebas × persentaseBersama
+maksimum normal = kontribusiTetap + porsiBebas
 persentaseBersama = max(0, (target - kontribusiTetap) / porsiBebas)
 ```
 
-Setiap skor saran adalah maksimum penilaian dikali persentase bersama, dibulatkan ke atas ke dua desimal. Proyeksi dihitung ulang dari skor saran yang terlihat. Jika tidak ada nilai bebas, hasil tetap dibandingkan langsung dengan target. Jika tidak ada baris yang disertakan, hasil tidak tersedia. Jika saran melampaui maksimum, panel menyatakan perlu bonus dan saran asli tetap ditampilkan. Persentase bersama adalah salah satu solusi untuk mencapai target. Solver tidak mencari kombinasi integer.
+Saran untuk setiap nilai bebas adalah maksimum penilaian dikali persentase bersama, dibulatkan ke atas sampai dua desimal. Apabila target bisa dicapai tetapi pembulatan melewati maksimum pecahan, gunakan maksimum eksak. Proyeksi dihitung ulang dari skor saran yang tampil. Jika target melewati maksimum normal, ringkasan menampilkan maksimum yang dapat dicapai dan selisih target dalam **poin persentase**. Kolom saran tetap menampilkan kebutuhan matematika dan **poin skor** di atas maksimum penilaian. Kelayakan serta klasifikasi huruf selalu memakai pecahan eksak. Nilai bonus aktual tetap masuk perhitungan. Asumsi hipotetis yang melewati maksimum menjadikan hasil bersyarat.
+
+## Penyimpanan dan pembaruan data dasar
+
+SQLite versi skema 1 menambah status konfigurasi lama, tabel riwayat bobot lama, dan tabel skenario. Migrasi berlangsung dalam transaksi. Nilai dan identitas lama dipertahankan. Konversi bobot memakai desimal eksak jika memungkinkan. Jika rasionya berulang, sistem menawarkan pembagian ke total 100% dan menampilkan selisih hasil berdasarkan data saat ini. Usulan 2:1, misalnya, adalah 66,67% dan 33,33%. Simpan untuk memakai usulan atau penyesuaian Anda. Bobot asli diarsipkan saat konversi berhasil.
+
+Skenario memiliki UUID, nama, dan snapshot berversi berisi konfigurasi, penilaian dasar, target, serta baris draf. Penyimpanan skenario hanya menulis tabel skenario. Proyeksi tidak disimpan. Perubahan nilai, struktur, atau konfigurasi aktual membuat dasar lama terlihat sebagai historis. Tinjauan data terbaru mencocokkan UUID, mempertahankan edit yang kompatibel, dan menampilkan edit yang dilepas karena penilaian atau kategori hilang atau maksimum sumber berubah. Hasil tinjauan tetap berupa draf sampai disimpan.
 
 ## Peta tanggung jawab OOP
 
 | Kelas | Tanggung jawab | Contoh untuk presentasi |
 | --- | --- | --- |
 | `Course`, `Course.Category`, `Course.Assessment` | Model aktual yang immutable, validasi, dan identitas UUID | Mengganti nama penilaian mempertahankan ID, dan kategori yang masih dirujuk tidak dapat dihapus. |
-| `Simulation`, `Simulation.Row` | Menjaga salinan sementara, target, pengecualian, dan pemulihan | `restore` mengambil nilai sumber dari baseline. Operasi ini tidak mengenal SQLite. |
+| `Simulation`, `Simulation.Row` | Menjaga draf, target, pengecualian, pemulihan, dan tinjauan data dasar | `restore` mengambil nilai sumber dari baseline. Operasi ini tidak mengenal SQLite. |
 | `Aggregation` | Abstraksi koefisien penilaian dengan dua implementasi enum | `shares` dipanggil dengan cara sama pada dua metode, tetapi total poin dan rata-rata persentase menerapkan perilaku berbeda. |
 | `Calculation`, `Exact`, `Grade`, `Numbers` | Evaluasi dan solver, aritmetika pecahan, klasifikasi huruf, dan parser desimal | Kedua hasil memakai evaluator yang sama. `84,5` ditentukan sebagai A- sebelum pemformatan. |
-| `CourseStore` | I/O SQLite dan transaksi data aktual | Penyimpanan gagal membatalkan perubahan dalam transaksi. Penyimpanan membandingkan snapshot sebelumnya untuk mencegah penimpaan dari jendela lain. |
-| `WhatIfApp`, `Editor` | Tampilan, interaksi, validasi formulir, dan koordinasi pekerjaan I/O | `Editor` menyimpan isian sampai operasi berhasil. `WhatIfApp` menjalankan I/O lewat JavaFX `Task`. |
+| `CourseStore`, `Scenario`, `ScenarioSnapshot` | Migrasi SQLite, transaksi aktual/skenario, dan snapshot input | Penyimpanan skenario mempunyai UUID tersendiri dan memeriksa versi tersimpan sebelum pembaruan. |
+| `WeightConversion`, `CategoryEditor` | Usulan konversi dan validasi persentase satu draf | Usulan menampilkan selisih dan perubahan diterapkan dalam satu transaksi. |
+| `WhatIfApp`, `Editor`, `ScenarioComparison` | Tampilan, interaksi, validasi formulir, dan koordinasi pekerjaan I/O | `Editor` menyimpan isian sampai operasi berhasil. `WhatIfApp` menjalankan I/O lewat JavaFX `Task`. |
 
 Koleksi generik menyimpan kategori, penilaian, dan saran menurut ID. Exception validasi menjaga objek tetap sah. Prepared statement dan try-with-resources mengelola I/O tanpa SQL di event handler.

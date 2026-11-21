@@ -37,17 +37,6 @@ final class Editor {
                 save, invalid, name, name.textProperty(), method.valueProperty());
     }
 
-    static void category(Window owner, Category previous, Consumer<Boolean> invalid, Save<Category> save) {
-        TextField name = text(previous == null ? "" : previous.name(), "Contoh: Ujian");
-        TextField weight = text(previous == null ? "1" : Numbers.display(previous.weight()), "Contoh: 1,5");
-        UUID id = previous == null ? UUID.randomUUID() : previous.id();
-        VBox content = new VBox(12, field("Nama kategori", name), field("Bobot relatif", weight),
-                note("Bobot 100 dan 50 memberi proporsi yang sama dengan bobot 2 dan 1.", "muted"));
-        show(owner, previous == null ? "Tambah kategori" : "Ubah kategori", "Simpan", content,
-                () -> new Category(id, name.getText(), Numbers.read(weight.getText(), "Bobot", false, true)),
-                save, invalid, name, name.textProperty(), weight.textProperty());
-    }
-
     static void assessment(Window owner, Course course, Assessment previous, Simulation.Row row,
                            boolean simulation, Consumer<Boolean> invalid, Save<AssessmentInput> save) {
         boolean hasActual = row != null && row.original() != null && row.original().earned() != null;

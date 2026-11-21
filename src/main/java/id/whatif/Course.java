@@ -6,7 +6,18 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-record Course(UUID id, String name, Aggregation method, List<Category> categories, List<Assessment> assessments) {
+record Course(UUID id, String name, Aggregation method, List<Category> categories, List<Assessment> assessments,
+              boolean legacyWeights) {
+    static final BigDecimal FULL_WEIGHT = BigDecimal.valueOf(100);
+
+    Course(UUID id, String name, Aggregation method, List<Category> categories, List<Assessment> assessments) {
+        this(id, name, method, categories, assessments, false);
+    }
+
+    static BigDecimal totalWeight(List<Category> categories) {
+        return categories.stream().map(Category::weight).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     Course {
         Objects.requireNonNull(id);
         name = requiredName(name, "Nama mata kuliah");
@@ -15,6 +26,9 @@ record Course(UUID id, String name, Aggregation method, List<Category> categorie
         assessments = List.copyOf(assessments);
 
         if (categories.isEmpty()) throw new IllegalArgumentException("Sisakan minimal satu kategori.");
+        if (!legacyWeights && totalWeight(categories).compareTo(FULL_WEIGHT) != 0) {
+            throw new IllegalArgumentException("Jumlah persentase kategori wajib tepat 100%.");
+        }
         var categoryIds = new HashSet<UUID>();
         for (Category category : categories) {
             if (!categoryIds.add(category.id())) throw new IllegalArgumentException("Kategori duplikat.");
@@ -30,11 +44,11 @@ record Course(UUID id, String name, Aggregation method, List<Category> categorie
 
     static Course create(String name, Aggregation method) {
         return new Course(UUID.randomUUID(), name, method,
-                List.of(new Category(UUID.randomUUID(), "Umum", BigDecimal.ONE)), List.of());
+                List.of(new Category(UUID.randomUUID(), "Umum", FULL_WEIGHT)), List.of());
     }
 
     Course withSettings(String name, Aggregation method) {
-        return new Course(id, name, method, categories, assessments);
+        return new Course(id, name, method, categories, assessments, legacyWeights);
     }
 
     Course withCategories(List<Category> categories) {
@@ -42,7 +56,7 @@ record Course(UUID id, String name, Aggregation method, List<Category> categorie
     }
 
     Course withAssessments(List<Assessment> assessments) {
-        return new Course(id, name, method, categories, assessments);
+        return new Course(id, name, method, categories, assessments, legacyWeights);
     }
 
     String categoryName(UUID id) {
