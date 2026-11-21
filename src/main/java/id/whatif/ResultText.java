@@ -27,6 +27,11 @@ final class ResultText {
                 : Numbers.display(maximum) + " (+" + Numbers.display(excess) + " bonus)";
     }
 
+    static BigDecimal wholeScoreWithinMaximum(Exact commonPercent, BigDecimal maximum) {
+        BigDecimal score = Exact.of(maximum).multiply(commonPercent).divide(Exact.HUNDRED).decimal(0, RoundingMode.CEILING);
+        return score.compareTo(maximum) <= 0 ? score : null;
+    }
+
     static String status(Calculation.Projection projection) {
         return switch (projection.status()) {
             case EMPTY -> "Belum ada hasil";

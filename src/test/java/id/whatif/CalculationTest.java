@@ -255,6 +255,39 @@ class CalculationTest {
         assertEquals("salah", simulation.targetInput());
     }
 
+    @Test void targetSummaryFixtureKeepsExactFeasibilityAndOffersSafeWholePoints() {
+        Category tasks = category("Tugas", "70");
+        Category finals = category("UAS", "30");
+        Assessment uas = row(finals, "100", null);
+        var simulation = new Simulation(course(Aggregation.TOTAL_POINTS, List.of(tasks, finals),
+                List.of(row(tasks, "70", "50"), uas)));
+        simulation.chooseGrade(Grade.B);
+        var original = simulation.state();
+        var report = Calculation.targetReport(simulation);
+        assertGradeRequirement(report, Grade.B, uas, "66.67", WITH_SUGGESTIONS);
+        assertGradeRequirement(report, Grade.A, uas, "116.67", UNREACHABLE);
+        assertEquals(Exact.of(80), report.selected().maximum());
+        assertEquals(Grade.A_MINUS, Grade.classify(report.selected().maximum()));
+        assertEquals(num("67"), ResultText.wholeScoreWithinMaximum(report.selected().commonPercent(), uas.maximum()));
+        assertEquals(original, simulation.state());
+
+        simulation.put(new Assessment(uas.id(), "UAS", finals.id(), uas.maximum(), num("66")), true);
+        assertEquals(Exact.of(num("69.8")), Calculation.project(simulation).percent());
+        assertEquals(UNREACHABLE, Calculation.project(simulation).status());
+        simulation.put(new Assessment(uas.id(), "UAS", finals.id(), uas.maximum(), num("67")), true);
+        assertEquals(Exact.of(num("70.1")), Calculation.project(simulation).percent());
+        assertEquals(SECURED, Calculation.project(simulation).status());
+    }
+
+    @Test void wholePointHintRespectsFractionalNormalMaximum() {
+        Category category = category("Praktikum", "100");
+        var simulation = new Simulation(totalCourse(category, List.of(row(category, "1.005", null))));
+        simulation.targetInput("100");
+        var result = Calculation.project(simulation);
+        assertEquals(WITH_SUGGESTIONS, result.status());
+        assertNull(ResultText.wholeScoreWithinMaximum(result.commonPercent(), num("1.005")));
+    }
+
     private static void assertGradeRequirement(Calculation.TargetReport report, Grade grade, Assessment assessment,
                                                String required, Calculation.Status status) {
         var projection = report.grades().stream().filter(item -> item.grade() == grade).findFirst().orElseThrow().projection();

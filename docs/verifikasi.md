@@ -112,3 +112,16 @@ Dialog otomatis memfokuskan dan menyeleksi `Target A-` pada 80% serta `Target 84
 | Saran berdasarkan batas huruf | [Lihat dialog Target A-](screenshots/28-nama-target-huruf.png) |
 | Saran berdasarkan target desimal | [Lihat dialog Target 84,5%](screenshots/29-nama-target-desimal.png) |
 | Skenario dibuka kembali pada 960 × 650 | [Lihat tampilan jendela kecil](screenshots/30-logo-jendela-kecil.png) |
+
+## Kartu target dan tabel huruf yang ringkas
+
+Maven `clean verify` lulus dengan 36 tes pada Java 21. Regresi memakai Tugas berbobot 70% dengan skor 50/70 serta UAS berbobot 30% dengan maksimum 100. Target B (70%) memerlukan 66,67/100. Pada perhitungan yang sama, 66/100 menghasilkan 69,8% dan 67/100 menghasilkan 70,1%. Maksimum normal 80% (A−) tercapai dengan UAS 100/100. Target A (85%) memerlukan 116,67/100 dan melampaui batas normal. Tes tambahan memeriksa batas maksimum pecahan agar saran bilangan bulat tidak melewatinya.
+
+Aplikasi JavaFX diuji dengan basis data demo terisolasi pada Linux, di jendela 1366 × 768 dan 960 × 650. Perubahan target dan pembukaan skenario tersimpan memperbarui kartu beserta kebutuhan per huruf. Diperiksa juga kombinasi dua skor bebas, target tidak valid, skenario tanpa penilaian yang disertakan, serta hasil tetap yang memenuhi atau belum memenuhi target. Kontrol **Lihat Semua Target** dan **Tampilkan Lebih Sedikit** mengubah jumlah baris dari empat ke delapan dan kembali ke empat. Target, pilihan skenario, nilai aktual, dan skenario tersimpan tetap sama sesudah penggunaan kontrol.
+
+| Kondisi | Tangkapan layar |
+| --- | --- |
+| Sebelum, target B pada fixture yang sama | [Tampilan lama pada 1366 × 768](screenshots/31-target-sebelum.png) |
+| Sesudah, target B dan saran bersyarat 67/100 | [Kartu dan tabel baru pada 1366 × 768](screenshots/32-target-sesudah.png) |
+| Target A di atas maksimum normal | [Penjelasan skor tambahan](screenshots/33-target-di-luar-batas.png) |
+| Skenario dengan dua skor bebas | [Kombinasi pada 960 × 650](screenshots/34-target-kombinasi-960x650.png) |
