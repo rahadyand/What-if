@@ -26,6 +26,10 @@ $demo = Join-Path $env:TEMP ("whatif-demo-" + [guid]::NewGuid())
 
 Aplikasi terbuka di **Dashboard**. Tambah semester, pilih semester untuk melihat ringkasannya, dan gunakan **Jadikan Aktif** untuk menentukan semester startup. Dari grup semester, pilih **+ Mata kuliah** agar semester terisi otomatis. **Nilai Aktual → Pengaturan** mengubah semester, SKS, dan kehadiran. Mata kuliah dari basis data versi lama tersedia di **Belum dikelompokkan** sampai semester diisi.
 
+## Nilai final dan indeks prestasi
+
+Di **Nilai Aktual**, gunakan **Tetapkan Nilai Final** untuk mengonfirmasi hasil lengkap atau memasukkan hasil resmi kampus. Dashboard menghitung IP dan IPK dari angka mutu final yang tersimpan. **Pengaturan Skala Nilai** di Dashboard mengubah skala untuk perhitungan aktual dan What If baru. Tinjau perubahan kandidat melalui **Tinjau Ulang Nilai Final**.
+
 ## Alur tinjau
 
 1. Saat menambah mata kuliah, centang pilihan **UTS**, **UAS**, **Tugas**, **Projek**, dan **Praktikum** yang tercantum di RPS, lalu isi bobotnya. Gunakan **+ Kategori kustom** untuk kategori lain. Simpan saat total kategori aktif tepat 100%. **Kelola kategori** membuka kembali draf bobot. **Pengaturan** mengubah cara menghitung hasil di dalam kategori.
@@ -40,12 +44,13 @@ Untuk data lama, tutup aplikasi dan cadangkan berkas SQLite beserta berkas penda
 ## Dokumen proyek
 
 - [Fondasi Akademik, peta OOP, dan keputusan Tahap 2](docs/tahap-akademik.md)
+- [Nilai final, IP, IPK, dan peta OOP](docs/nilai-final-dan-indeks.md)
 - [Perubahan What If](docs/perubahan-what-if.md)
 - [Kebijakan perhitungan dan peta OOP](docs/desain.md)
 - [Hasil verifikasi dan tangkapan layar](docs/verifikasi.md)
 - [Atribusi dan lisensi](docs/atribusi.md)
 - [Build dan peninjauan app-image Windows](docs/kemas-windows.md)
 
-## Di luar cakupan Tahap 1
+## Di luar cakupan Tahap 2
 
-Akun, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, tanggal, catatan, skala kustom, pembulatan alternatif, Pass/Fail, aturan penilaian berdasarkan kehadiran, nilai huruf langsung, override hasil akhir, ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, IP semester, IPK, serta installer dan publikasi GitHub Release.
+Akun, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, tanggal, catatan, pembulatan alternatif, Pass/Fail, aturan penilaian berdasarkan kehadiran,  ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, proyeksi Dashboard, rekomendasi target IP, serta installer dan publikasi GitHub Release.

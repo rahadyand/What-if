@@ -152,3 +152,25 @@ Pada basis data sintetis versi 1, startup menampilkan **Belum dikelompokkan**. N
 | Pemindahan semester, SKS, dan kehadiran | [Pengaturan mata kuliah](screenshots/39-pengaturan-sks-dan-kehadiran.png) |
 | Startup ulang dengan semester aktif | [Dashboard 960 × 650](screenshots/40-dashboard-960x650.png) |
 | Startup setelah migrasi skema 1 | [Belum dikelompokkan](screenshots/41-dashboard-migrasi.png) |
+
+## Tahap 2 — Nilai Final, IP, dan IPK Aktual
+
+Maven `clean verify` pada Java 21 lulus dengan 45 tes di Linux. Basis data sementara dari skema Tahap 1 dimigrasikan secara transaksional ke versi 3. Tes memeriksa semester aktif, SKS, kehadiran, nilai aktual, dan byte snapshot versi 1, serta memastikan data lama mulai tanpa nilai final. Regresi juga mencakup nilai E yang sah, SKS dan semester yang kosong, semester kosong, pemindahan mata kuliah, tinjauan calon pengulangan, batas persentase eksak, dan validasi skala.
+
+| Fixture | Perhitungan | Tampilan |
+| --- | --- | --- |
+| A untuk 3 SKS, B untuk 2 SKS, A− untuk 3 SKS | (12 + 6 + 11,10) ÷ 8 | **IP Semester Final 3,64** |
+| A dan B masing-masing 3 SKS dalam semester 12 SKS | (12 + 9) ÷ 6 | **IP dari nilai final sejauh ini 3,50 · 6 dari 12 SKS** |
+| Gabungan kedua semester | (29,10 + 21,00) ÷ 14 | **IPK Aktual 3,58 · 14 SKS masuk** |
+
+JavaFX diperiksa pada 1366 × 768 dan 960 × 650 dengan basis data uji. Perhitungan yang lengkap tampil belum final sampai dikonfirmasi. Nilai resmi B dari mata kuliah dengan penilaian kosong bertahan sesudah skala berubah dan aplikasi dibuka kembali. Penolakan batas duplikat, perubahan skala, perubahan bobot, pembatalan tinjauan, pilihan mempertahankan nilai, serta pembaruan eksplisit diperiksa. Kegagalan simpan yang dipicu pada SQLite mempertahankan hasil lama dan pilihan dalam dialog. Menyimpan ulang mengubah IP/IPK sesuai nilai final baru.
+
+What If baru memakai target dari skala aktif. Skenario lama tetap menampilkan nilai dan target dengan skala historis. Rincian IPK menampilkan kontribusi dari semester yang belum lengkap. Calon mata kuliah berulang baru terhitung setelah dipilih secara eksplisit. Pemindahan mata kuliah mengubah IP semester yang bersangkutan dan mempertahankan kontribusi IPK.
+
+- [IP Semester Final 3,64](screenshots/42-ip-semester-final.png)
+- [Pratinjau nilai resmi](screenshots/43-finalisasi-resmi.png)
+- [IP 3,50 dengan cakupan 6 dari 12 SKS](screenshots/44-ip-sejauh-ini.png)
+- [Rincian kontribusi IPK](screenshots/45-rincian-ipk.png)
+- [Tinjau ulang dari jendela 960 × 650](screenshots/46-tinjau-final-960x650.png)
+- [Dashboard 960 × 650 setelah pembaruan](screenshots/47-ip-ipk-960x650.png)
+- [Pengaturan skala nilai](screenshots/48-pengaturan-skala.png)

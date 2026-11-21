@@ -249,3 +249,12 @@
     -fx-padding: 11 13;
 }
 .dashboard-empty { -fx-padding: 19; }
+
+.final-grade-summary {
+    -fx-padding: 8 11;
+    -fx-background-color: #FCFAF7;
+    -fx-background-radius: 7;
+    -fx-border-color: -what-line;
+    -fx-border-radius: 7;
+}
+.index-unavailable { -fx-font-size: 19px; -fx-font-weight: bold; }

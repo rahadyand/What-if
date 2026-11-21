@@ -18,7 +18,7 @@ import java.util.UUID;
 
 /** Versioned snapshot of inputs only. SQLite owns scenario metadata and the atomic write. */
 final class ScenarioSnapshot {
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
 
     private ScenarioSnapshot() {}
 
@@ -32,6 +32,13 @@ final class ScenarioSnapshot {
             text(output, baseline.name());
             text(output, baseline.method().name());
             output.writeBoolean(baseline.legacyWeights());
+            text(output, state.scale().maximum().toPlainString());
+            output.writeInt(state.scale().grades().size());
+            for (Grade grade : state.scale().grades()) {
+                text(output, grade.letter());
+                text(output, grade.boundary().toPlainString());
+                text(output, grade.point().toPlainString());
+            }
             output.writeInt(baseline.categories().size());
             for (Category category : baseline.categories()) {
                 text(output, category.id().toString());
@@ -52,12 +59,14 @@ final class ScenarioSnapshot {
 
     static Simulation.State read(byte[] bytes) throws IOException {
         try (var input = new DataInputStream(new ByteArrayInputStream(bytes))) {
-            if (input.readInt() != VERSION) throw new IOException("Versi snapshot skenario tidak didukung.");
+            int version = input.readInt();
+            if (version != 1 && version != VERSION) throw new IOException("Versi snapshot skenario tidak didukung.");
             String target = text(input);
             UUID id = UUID.fromString(text(input));
             String name = text(input);
             Aggregation method = Aggregation.valueOf(text(input));
             boolean legacy = input.readBoolean();
+            GradeScale scale = version == 1 ? GradeScale.DEFAULT : scale(input);
             List<Category> categories = new ArrayList<>();
             int count = count(input);
             for (int index = 0; index < count; index++) {
@@ -85,10 +94,20 @@ final class ScenarioSnapshot {
             if (!seen.containsAll(originals.keySet()) || input.available() != 0) {
                 throw new IOException("Snapshot skenario tidak lengkap.");
             }
-            Simulation.State state = new Simulation.State(baseline, target, rows);
+            Simulation.State state = new Simulation.State(baseline, target, rows, scale);
             Simulation.from(state).target();
             return state;
         }
+    }
+
+    private static GradeScale scale(DataInputStream input) throws IOException {
+        BigDecimal maximum = new BigDecimal(text(input));
+        List<Grade> grades = new ArrayList<>();
+        int count = count(input);
+        for (int index = 0; index < count; index++) {
+            grades.add(new Grade(text(input), new BigDecimal(text(input)), new BigDecimal(text(input))));
+        }
+        return new GradeScale(maximum, grades);
     }
 
     private static void assessment(DataOutputStream out, Assessment row) throws IOException {

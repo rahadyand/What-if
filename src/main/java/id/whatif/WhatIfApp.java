@@ -28,6 +28,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -56,6 +58,9 @@ public final class WhatIfApp extends Application {
     private Simulation simulation;
     private Scenario openedScenario;
     private List<Scenario> scenarios = List.of();
+    private GradeScale activeScale = GradeScale.DEFAULT;
+    private final Map<UUID, FinalGrade> finals = new HashMap<>();
+    private Map<UUID, AcademicAverage.RepeatDecision> repeatDecisions = Map.of();
     private Label scenarioStatus;
     private boolean syncingTarget;
     private boolean invalidDraft;
@@ -150,13 +155,17 @@ public final class WhatIfApp extends Application {
         showEmpty("Memuat mata kuliah…", "Membuka penyimpanan lokal.", null);
         runIo(() -> {
             store.initialize();
-            return new Workspace(store.load(), store.loadScenarios(), store.loadSemesters());
+            return new Workspace(store.load(), store.loadScenarios(), store.loadSemesters(), store.loadGrading());
         }, loaded -> {
             busy = false;
             sidebar.setDisable(false);
             courses.clear();
             courses.addAll(loaded.courses());
             scenarios = loaded.scenarios();
+            activeScale = loaded.grading().scale();
+            finals.clear();
+            finals.putAll(loaded.grading().finals());
+            repeatDecisions = loaded.grading().repeats();
             semesters = loaded.terms().semesters();
             activeSemester = loaded.terms().activeId();
             viewedSemester = activeSemester != null ? activeSemester : semesters.isEmpty() ? null : semesters.getFirst().id();
@@ -187,7 +196,10 @@ public final class WhatIfApp extends Application {
         table = null;
         Semester viewed = semester(viewedSemester);
         List<Course> grouped = courses.stream().filter(item -> Objects.equals(viewedSemester, item.academic().semesterId())).toList();
+        var index = AcademicAverage.semester(viewedSemester, courses, finals);
+        var cumulative = AcademicAverage.ipk(courses, finals, repeatDecisions);
         var dashboard = new AcademicDashboard(viewed, viewed != null && viewed.id().equals(activeSemester), grouped,
+                AcademicIndexView.cards(viewed, index, cumulative, () -> showIpkDetails(cumulative)), this::editScale,
                 () -> editSemester(null), () -> editSemester(viewed), () -> activateSemester(viewed),
                 () -> editCourse(null, viewedSemester), this::openCourse);
         root.setCenter(verticalScroll(dashboard, "dashboard-scroll"));
@@ -199,7 +211,7 @@ public final class WhatIfApp extends Application {
         if (!confirmTransition("Buka mata kuliah")) return;
         course = next;
         viewedSemester = next.academic().semesterId();
-        simulation = whatIf ? new Simulation(next) : null;
+        simulation = whatIf ? new Simulation(next, activeScale) : null;
         openedScenario = null;
         invalidDraft = false;
         updateSidebar();
@@ -256,11 +268,13 @@ public final class WhatIfApp extends Application {
         } else if (course.legacyWeights()) {
             page.getChildren().add(Editor.note("Bobot relatif lama masih digunakan. Tinjau usulan konversi ke 100% di pengaturan kategori.", "validation"));
         }
-        page.getChildren().addAll(summary(), assessmentArea());
+        page.getChildren().add(summary());
+        if (simulation == null) page.getChildren().add(finalGradePanel());
+        page.getChildren().add(assessmentArea());
         if (simulation == null) {
             root.setCenter(page);
         } else {
-            targetSummary = new TargetSummary(course, courseScenarios());
+            targetSummary = new TargetSummary(course, activeScale, courseScenarios());
             page.getChildren().add(targetSummary);
             root.setCenter(verticalScroll(page, "simulation-page-scroll"));
         }
@@ -281,7 +295,7 @@ public final class WhatIfApp extends Application {
                 group.getToggles().getLast().setSelected(true);
                 return;
             }
-            simulation = enter ? new Simulation(course) : null;
+            simulation = enter ? new Simulation(course, activeScale) : null;
             openedScenario = null;
             showCourse(null);
             if (enter) targetField.requestFocus();
@@ -300,7 +314,7 @@ public final class WhatIfApp extends Application {
         picker.setCellFactory(unused -> new ListCell<>() {
             @Override protected void updateItem(Scenario item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.name() + (item.stale(course) ? " · data lama" : ""));
+                setText(empty || item == null ? null : item.name() + (item.stale(course, activeScale) ? " · data lama" : ""));
             }
         });
         picker.valueProperty().addListener((unused, before, next) -> {
@@ -321,9 +335,9 @@ public final class WhatIfApp extends Application {
         copy.setOnAction(event -> saveScenario(true, true));
         MenuItem compare = new MenuItem("Bandingkan skenario");
         compare.setDisable(saved.size() < 2);
-        compare.setOnAction(event -> ScenarioComparison.show(stage, course, courseScenarios()));
+        compare.setOnAction(event -> ScenarioComparison.show(stage, course, activeScale, courseScenarios()));
         MenuItem rebase = new MenuItem("Tinjau data aktual terbaru");
-        rebase.setDisable(simulation.baseline().sameGradeInputs(course));
+        rebase.setDisable(simulation.matchesBaseline(course, activeScale));
         rebase.setOnAction(event -> reviewBaseline());
         MenuItem inspect = new MenuItem("Lihat data dasar");
         inspect.setOnAction(event -> inspectBaseline());
@@ -342,7 +356,7 @@ public final class WhatIfApp extends Application {
 
     private void openScenario(Scenario saved) {
         openedScenario = saved;
-        simulation = saved == null ? new Simulation(course) : Simulation.from(saved.state());
+        simulation = saved == null ? new Simulation(course, activeScale) : Simulation.from(saved.state());
         showCourse(null);
     }
 
@@ -358,7 +372,7 @@ public final class WhatIfApp extends Application {
         Scenario previous = copy ? null : openedScenario;
         UUID id = previous == null ? UUID.randomUUID() : previous.id();
         boolean suggestName = openedScenario == null;
-        TextField name = new TextField(suggestName ? Scenario.suggestedName(target)
+        TextField name = new TextField(suggestName ? Scenario.suggestedName(target, simulation.scale())
                 : copy ? openedScenario.name() + " – salinan" : previous.name());
         name.setPromptText("Nama skenario");
         Simulation.State state = simulation.state();
@@ -389,10 +403,10 @@ public final class WhatIfApp extends Application {
     }
 
     private boolean scenarioModified() {
-        if (openedScenario == null) return simulation.modified() || !simulation.baseline().sameGradeInputs(course);
+        if (openedScenario == null) return simulation.modified() || !simulation.matchesBaseline(course, activeScale);
         Simulation.State original = openedScenario.state();
         var current = simulation.state();
-        if (!current.baseline().sameGradeInputs(original.baseline()) || !current.rows().equals(original.rows())) return true;
+        if (!simulation.matchesBaseline(original.baseline(), original.scale()) || !current.rows().equals(original.rows())) return true;
         try {
             return simulation.target().compareTo(Numbers.read(original.target(), "Target", false, false)) != 0;
         } catch (IllegalArgumentException invalid) {
@@ -402,7 +416,7 @@ public final class WhatIfApp extends Application {
 
     private void inspectBaseline() {
         Course baseline = simulation.baseline();
-        StringBuilder text = new StringBuilder(calculationConfiguration(baseline));
+        StringBuilder text = new StringBuilder(calculationConfiguration(baseline, simulation.scale()));
         text.append("\n\nPenilaian aktual pada data dasar");
         for (Assessment assessment : baseline.assessments()) {
             text.append("\n").append(assessment.name()).append(" · ")
@@ -417,11 +431,11 @@ public final class WhatIfApp extends Application {
     }
 
     private void reviewBaseline() {
-        var review = simulation.reviewBaseline(course);
+        var review = simulation.reviewBaseline(course, activeScale);
         String message = "Gunakan nilai, struktur, dan aturan aktual terbaru sebagai dasar draf. "
                 + "Versi tersimpan tetap berlaku sampai draf disimpan."
-                + "\n\nData dasar skenario\n" + calculationConfiguration(simulation.baseline())
-                + "\n\nData aktual terbaru\n" + calculationConfiguration(course)
+                + "\n\nData dasar skenario\n" + calculationConfiguration(simulation.baseline(), simulation.scale())
+                + "\n\nData aktual terbaru\n" + calculationConfiguration(course, activeScale)
                 + "\n\n" + (review.notes().isEmpty() ? "Tidak ada edit skenario yang perlu dilepas."
                                                 : String.join("\n", review.notes()));
         ButtonType apply = new ButtonType("Perbarui draf", ButtonData.OK_DONE);
@@ -447,11 +461,14 @@ public final class WhatIfApp extends Application {
         return scroll;
     }
 
-    private static String calculationConfiguration(Course baseline) {
+    private static String calculationConfiguration(Course baseline, GradeScale scale) {
         String kind = baseline.legacyWeights() ? "Bobot relatif lama" : "Persentase kategori";
         String weights = String.join(", ", baseline.categories().stream().map(category -> category.name()
                 + " " + Numbers.display(category.weight()) + (baseline.legacyWeights() ? "" : "%")).toList());
-        return "Metode dalam kategori: " + baseline.method() + "\n" + kind + ": " + weights;
+        String grades = String.join(", ", scale.grades().stream()
+                .map(grade -> grade + " ≥" + Numbers.display(grade.boundary()) + "% (" + Numbers.display(grade.point()) + ")").toList());
+        return "Metode dalam kategori " + baseline.method() + "\n" + kind + " · " + weights
+                + "\nSkala " + Numbers.display(scale.maximum()) + " · " + grades;
     }
 
     private VBox targetControls() {
@@ -459,7 +476,7 @@ public final class WhatIfApp extends Application {
         targetField.setAccessibleText("Target persentase minimum");
         targetField.setPrefColumnCount(7);
         targetField.setMaxWidth(98);
-        targetLetter = new ComboBox<>(FXCollections.observableArrayList(Grade.values()));
+        targetLetter = new ComboBox<>(FXCollections.observableArrayList(simulation.scale().grades()));
         targetLetter.setAccessibleText("Huruf target");
         targetLetter.setPrefWidth(78);
         targetError = label("", "validation");
@@ -683,12 +700,13 @@ public final class WhatIfApp extends Application {
                                     + " · bobot " + ResultText.percent(detail.weight())).toList())));
                 }
             } else {
-                showResult("Nilai aktual", result.percent(), "Lengkap", "Semua penilaian sudah memiliki nilai.", "positive");
+                showResult("Nilai aktual", result.percent(), finals.containsKey(course.id()) ? "Perhitungan lengkap"
+                        : "Lengkap · belum ditetapkan final", "Semua penilaian sudah memiliki nilai.", "positive");
             }
             return;
         }
 
-        String lineage = simulation.baseline().sameGradeInputs(course) ? "" : " · Data dasar lama";
+        String lineage = simulation.matchesBaseline(course, activeScale) ? "" : " · Data dasar lama";
         if (simulation.baseline().legacyWeights()) lineage += " · Bobot relatif lama";
         scenarioStatus.setText((scenarioModified() ? "Belum disimpan"
                 : openedScenario == null ? "Draf baru" : "Tersimpan") + lineage);
@@ -696,7 +714,7 @@ public final class WhatIfApp extends Application {
         String calculationError = "";
         try {
             var target = simulation.target();
-            syncLetter(Grade.classify(Exact.of(target)));
+            syncLetter(simulation.scale().classify(Exact.of(target)));
             setTargetError("");
             if (!invalidDraft) report = Calculation.targetReport(simulation);
         } catch (IllegalArgumentException invalid) {
@@ -783,8 +801,8 @@ public final class WhatIfApp extends Application {
     private void showResult(String title, Exact percent, String status, String detail, String style) {
         metricTitle.setText(title);
         metricValue.setText(percent == null ? NONE : Numbers.display(percent.decimal(2, RoundingMode.DOWN)) + "%");
-        Grade grade = percent == null ? null : Grade.classify(percent);
-        metricGrade.setText(grade == null ? "" : grade + " · poin " + grade.point.toPlainString().replace('.', ','));
+        Grade grade = percent == null ? null : (simulation == null ? activeScale : simulation.scale()).classify(percent);
+        metricGrade.setText(grade == null ? "" : grade + " · poin " + grade.point().toPlainString().replace('.', ','));
         metricGrade.setVisible(grade != null);
         metricGrade.setManaged(grade != null);
         resultStatus.setText(status);
@@ -792,6 +810,78 @@ public final class WhatIfApp extends Application {
         if (!style.isEmpty()) resultStatus.getStyleClass().add(style);
         resultDetail.setTooltip(null);
         resultDetail.setText(detail);
+    }
+
+    private HBox finalGradePanel() {
+        FinalGrade stored = finals.get(course.id());
+        FinalGrade calculated = FinalGrade.calculated(Calculation.actual(course), activeScale);
+        var review = stored == null ? null : stored.review(calculated, activeScale);
+        Label title = Editor.note(stored == null ? "Nilai final belum ditetapkan" : "Nilai final " + stored.display() + " angka mutu", "field-label");
+        String detail = stored == null ? (calculated == null ? "Nilai resmi dapat dimasukkan sebelum seluruh penilaian tersedia."
+                : "Konfirmasi hasil untuk memasukkannya ke IP dan IPK.") : stored.source().toString();
+        if (stored != null) {
+            if (calculated == null) detail += " · Perhitungan aktual belum lengkap.";
+            if (review.needed()) detail += " · " + review.explanation();
+            else if (review.candidateKey() != null) detail += " · Hasil tersimpan dipertahankan.";
+        }
+        String action = stored == null ? "Tetapkan Nilai Final" : review.needed() ? "Tinjau Ulang Nilai Final" : "Kelola Nilai Final";
+        VBox text = new VBox(3, title, Editor.note(detail, "muted"));
+        text.setMinWidth(0);
+        HBox.setHgrow(text, Priority.ALWAYS);
+        Course expected = course;
+        Button finalize = button(action, () -> FinalGradeEditor.show(stage, stored, calculated, activeScale,
+                (draft, success, failure) -> saveGrading(() -> {
+                    store.saveFinal(expected, activeScale, stored, draft);
+                    return draft;
+                }, saved -> {
+                    finals.put(expected.id(), saved);
+                    showCourse(selectedRowId());
+                }, success, failure)));
+        if (review != null && review.needed()) finalize.getStyleClass().add("scenario-save");
+        HBox panel = new HBox(9, text, finalize);
+        panel.setId("course-final-grade");
+        panel.setAlignment(Pos.CENTER_LEFT);
+        panel.getStyleClass().add("final-grade-summary");
+        return panel;
+    }
+
+    private void editScale() {
+        GradeScale expected = activeScale;
+        GradeScaleEditor.show(stage, expected, (draft, success, failure) -> saveGrading(() -> {
+            store.saveScale(expected, draft);
+            return draft;
+        }, saved -> {
+            activeScale = saved;
+            showDashboard();
+        }, success, failure));
+    }
+
+    private void showIpkDetails(AcademicAverage.Cumulative cumulative) {
+        Function<UUID, String> name = id -> {
+            Semester item = semester(id);
+            return item == null ? AcademicDetails.UNGROUPED : item.toString();
+        };
+        AcademicIndexView.breakdown(stage, cumulative, name, group ->
+                AcademicIndexView.review(stage, group, repeatDecisions, name, (selected, success, failure) ->
+                        saveGrading(() -> store.saveRepeatReview(group, repeatDecisions, selected), saved -> {
+                            repeatDecisions = saved;
+                            showDashboard();
+                        }, success, failure)));
+    }
+
+    private <T> void saveGrading(Callable<T> write, Consumer<T> update, Runnable success, Consumer<String> failure) {
+        busy = true;
+        root.setDisable(true);
+        runIo(write, saved -> {
+            busy = false;
+            root.setDisable(false);
+            update.accept(saved);
+            success.run();
+        }, message -> {
+            busy = false;
+            root.setDisable(false);
+            failure.accept(message);
+        });
     }
 
     private void editCourse(Course previous, UUID initialSemester) {
@@ -893,6 +983,7 @@ public final class WhatIfApp extends Application {
             root.setDisable(false);
             busy = false;
             courses.remove(selected);
+            finals.remove(selected.id());
             scenarios = scenarios.stream().filter(item -> !item.courseId().equals(selected.id())).toList();
             course = null;
             viewedSemester = selected.academic().semesterId();
@@ -938,7 +1029,8 @@ public final class WhatIfApp extends Application {
             boolean readable = detail != null && (detail.startsWith("Data telah berubah")
                     || detail.startsWith("Versi basis data") || detail.startsWith("Skema basis data")
                     || detail.startsWith("Basis data rusak") || detail.startsWith("Data skenario")
-                    || detail.startsWith("Data mata kuliah") || detail.startsWith("Data semester"));
+                    || detail.startsWith("Data mata kuliah") || detail.startsWith("Data semester")
+                    || detail.startsWith("Data nilai final"));
             boolean corrupt = cause instanceof org.sqlite.SQLiteException sqlite
                     && (sqlite.getResultCode() == org.sqlite.SQLiteErrorCode.SQLITE_CORRUPT
                         || sqlite.getResultCode() == org.sqlite.SQLiteErrorCode.SQLITE_NOTADB);
@@ -969,7 +1061,7 @@ public final class WhatIfApp extends Application {
 
     private void resetSimulation() {
         String description = openedScenario == null
-                ? "Kembalikan draf ke data dasarnya dan target awal 85%?"
+                ? "Kembalikan draf ke data dasarnya dan target awal " + Numbers.display(simulation.scale().defaultTarget()) + "%?"
                 : "Kembalikan draf ke isi dan data dasar yang terakhir disimpan?";
         if (scenarioModified() && !confirm(stage, "Atur ulang draf", description, "Atur ulang")) return;
         if (openedScenario == null) simulation.reset();
@@ -1078,7 +1170,8 @@ public final class WhatIfApp extends Application {
         return result;
     }
 
-    private record Workspace(List<Course> courses, List<Scenario> scenarios, CourseStore.SemesterSelection terms) {}
+    private record Workspace(List<Course> courses, List<Scenario> scenarios, CourseStore.SemesterSelection terms,
+                             CourseStore.GradingData grading) {}
 
     private record ViewRow(UUID id, String name, String category, String maximum, String entered, String required,
                            String status, boolean excluded, boolean restorable) {}

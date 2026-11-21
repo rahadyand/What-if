@@ -16,13 +16,15 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.Objects;
 import java.util.UUID;
 
 final class CourseStore {
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
     private static final String COURSE_COLUMNS = "id, name, method, legacy_weights, semester_id, sks, present, meetings";
     private final Path database;
 
@@ -58,11 +60,13 @@ final class CourseStore {
                     throw new SQLException("Versi basis data tidak didukung: " + version + ".");
                 }
                 if (version == 0) migrateWeights(connection);
-                if (version < SCHEMA_VERSION) migrateAcademic(connection);
+                if (version < 2) migrateAcademic(connection);
+                if (version < 3) migrateGrading(connection);
                 validateSchema(connection, SCHEMA_VERSION);
                 if (version < SCHEMA_VERSION) {
                     readCourses(connection);
                     readSemesters(connection);
+                    readGrading(connection);
                     statement.executeUpdate("PRAGMA user_version = " + SCHEMA_VERSION);
                 }
             }
@@ -148,6 +152,32 @@ final class CourseStore {
         }
     }
 
+    private static void migrateGrading(Connection connection) throws SQLException {
+        validateSchema(connection, 2);
+        try (var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    CREATE TABLE grade_scale_settings (id INTEGER PRIMARY KEY CHECK (id=1), maximum TEXT NOT NULL)
+                    """);
+            statement.executeUpdate("""
+                    CREATE TABLE grade_scale_rows (letter TEXT PRIMARY KEY, boundary TEXT NOT NULL UNIQUE, points TEXT NOT NULL)
+                    """);
+            statement.executeUpdate("INSERT INTO grade_scale_settings VALUES (1, '4')");
+            writeScale(connection, GradeScale.DEFAULT);
+            statement.executeUpdate("""
+                    CREATE TABLE confirmed_grades (
+                        course_id TEXT PRIMARY KEY REFERENCES courses ON DELETE CASCADE,
+                        letter TEXT NOT NULL, points TEXT NOT NULL, source TEXT NOT NULL, kept_candidate TEXT
+                    )
+                    """);
+            statement.executeUpdate("""
+                    CREATE TABLE ipk_repeat_reviews (
+                        course_id TEXT PRIMARY KEY REFERENCES courses ON DELETE CASCADE,
+                        group_key TEXT NOT NULL, included INTEGER NOT NULL CHECK (included IN (0,1))
+                    )
+                    """);
+        }
+    }
+
     private static void validateSchema(Connection connection, int version) throws SQLException {
         try (var statement = connection.createStatement()) {
             String courseColumns = switch (version) {
@@ -166,12 +196,140 @@ final class CourseStore {
                 statement.executeQuery("SELECT id, label, academic_year FROM semesters LIMIT 0").close();
                 statement.executeQuery("SELECT active_semester_id FROM academic_settings ORDER BY id LIMIT 0").close();
             }
+            if (version >= 3) {
+                statement.executeQuery("SELECT id, maximum FROM grade_scale_settings LIMIT 0").close();
+                statement.executeQuery("SELECT letter, boundary, points FROM grade_scale_rows LIMIT 0").close();
+                statement.executeQuery("SELECT course_id, letter, points, source, kept_candidate FROM confirmed_grades LIMIT 0").close();
+                statement.executeQuery("SELECT course_id, group_key, included FROM ipk_repeat_reviews LIMIT 0").close();
+            }
             try (var violations = statement.executeQuery("PRAGMA foreign_key_check")) {
                 if (violations.next()) throw new SQLException("Relasi basis data tidak sah. Berkas asli dipertahankan.");
             }
         } catch (SQLException failure) {
             throw new SQLException("Skema basis data tidak sah. Berkas asli dipertahankan.", failure);
         }
+    }
+
+    GradingData loadGrading() throws SQLException { return transact(CourseStore::readGrading); }
+
+    private static GradingData readGrading(Connection connection) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            var finals = new HashMap<UUID, FinalGrade>();
+            try (var rows = statement.executeQuery("SELECT course_id, letter, points, source, kept_candidate FROM confirmed_grades")) {
+                while (rows.next()) finals.put(readId(rows.getString("course_id")), readFinal(rows));
+            }
+            var repeats = new HashMap<UUID, AcademicAverage.RepeatDecision>();
+            try (var rows = statement.executeQuery("SELECT course_id, group_key, included FROM ipk_repeat_reviews")) {
+                while (rows.next()) repeats.put(readId(rows.getString(1)), new AcademicAverage.RepeatDecision(rows.getString(2), rows.getBoolean(3)));
+            }
+            return new GradingData(readScale(connection), Map.copyOf(finals), Map.copyOf(repeats));
+        } catch (IllegalArgumentException failure) {
+            throw new SQLException("Data nilai final atau skala tidak sah. Berkas asli dipertahankan.", failure);
+        }
+    }
+
+    private static GradeScale readScale(Connection connection) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            BigDecimal maximum;
+            try (var row = statement.executeQuery("SELECT maximum FROM grade_scale_settings WHERE id=1")) {
+                if (!row.next()) throw new SQLException("Skema basis data tidak memiliki skala nilai.");
+                maximum = new BigDecimal(row.getString(1));
+            }
+            var grades = new ArrayList<Grade>();
+            try (var rows = statement.executeQuery("SELECT letter, boundary, points FROM grade_scale_rows")) {
+                while (rows.next()) grades.add(new Grade(rows.getString(1), new BigDecimal(rows.getString(2)), new BigDecimal(rows.getString(3))));
+            }
+            return new GradeScale(maximum, grades);
+        }
+    }
+
+    void saveScale(GradeScale expected, GradeScale draft) throws SQLException {
+        transaction(connection -> {
+            if (!readScale(connection).equals(expected)) throw new SQLException("Data telah berubah di jendela lain. Buka ulang untuk memuat skala.");
+            writeScale(connection, draft);
+        });
+    }
+
+    private static void writeScale(Connection connection, GradeScale scale) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            statement.executeUpdate("DELETE FROM grade_scale_rows");
+        }
+        try (var write = connection.prepareStatement("UPDATE grade_scale_settings SET maximum=? WHERE id=1");
+             var row = connection.prepareStatement("INSERT INTO grade_scale_rows VALUES (?,?,?)")) {
+            write.setString(1, scale.maximum().toPlainString());
+            write.executeUpdate();
+            for (Grade grade : scale.grades()) {
+                row.setString(1, grade.letter());
+                row.setString(2, grade.boundary().toPlainString());
+                row.setString(3, grade.point().toPlainString());
+                row.addBatch();
+            }
+            row.executeBatch();
+        }
+    }
+
+    private static FinalGrade readFinal(ResultSet row) throws SQLException {
+        return new FinalGrade(row.getString("letter"), new BigDecimal(row.getString("points")),
+                FinalGrade.Source.valueOf(row.getString("source")), row.getString("kept_candidate"));
+    }
+
+    void saveFinal(Course course, GradeScale scale, FinalGrade expected, FinalGrade draft) throws SQLException {
+        transaction(connection -> {
+            verifyCurrent(connection, course.id(), course);
+            if (!readScale(connection).equals(scale)) throw new SQLException("Data telah berubah di jendela lain. Buka ulang untuk memuat skala.");
+            try (var lookup = connection.prepareStatement("SELECT letter, points, source, kept_candidate FROM confirmed_grades WHERE course_id=?")) {
+                lookup.setString(1, course.id().toString());
+                try (var row = lookup.executeQuery()) {
+                    if (!Objects.equals(row.next() ? readFinal(row) : null, expected)) {
+                        throw new SQLException("Data telah berubah di jendela lain. Buka ulang untuk memuat nilai final.");
+                    }
+                }
+            }
+            try (var write = connection.prepareStatement("""
+                    INSERT INTO confirmed_grades VALUES (?,?,?,?,?)
+                    ON CONFLICT(course_id) DO UPDATE SET letter=excluded.letter, points=excluded.points,
+                        source=excluded.source, kept_candidate=excluded.kept_candidate
+                    """)) {
+                write.setString(1, course.id().toString());
+                write.setString(2, draft.letter());
+                write.setString(3, draft.points().toPlainString());
+                write.setString(4, draft.source().name());
+                write.setString(5, draft.keptCandidate());
+                write.executeUpdate();
+            }
+        });
+    }
+
+    record GradingData(GradeScale scale, Map<UUID, FinalGrade> finals, Map<UUID, AcademicAverage.RepeatDecision> repeats) {}
+
+    Map<UUID, AcademicAverage.RepeatDecision> saveRepeatReview(AcademicAverage.RepeatGroup group,
+            Map<UUID, AcademicAverage.RepeatDecision> expected, Set<UUID> included) throws SQLException {
+        return transact(connection -> {
+            GradingData data = readGrading(connection);
+            var current = AcademicAverage.ipk(readCourses(connection), data.finals(), data.repeats()).repeats().stream()
+                    .filter(item -> item.key().equals(group.key())).findFirst().orElse(null);
+            if (!Objects.equals(group, current) || group.courses().stream().map(entry -> entry.course().id())
+                    .anyMatch(id -> !Objects.equals(expected.get(id), data.repeats().get(id)))) {
+                throw new SQLException("Data telah berubah di jendela lain. Buka ulang untuk meninjau mata kuliah.");
+            }
+            var updated = new HashMap<>(data.repeats());
+            try (var write = connection.prepareStatement("""
+                    INSERT INTO ipk_repeat_reviews VALUES (?,?,?)
+                    ON CONFLICT(course_id) DO UPDATE SET group_key=excluded.group_key, included=excluded.included
+                    """)) {
+                for (var entry : group.courses()) {
+                    UUID id = entry.course().id();
+                    var decision = new AcademicAverage.RepeatDecision(group.key(), included.contains(id));
+                    write.setString(1, id.toString());
+                    write.setString(2, decision.groupKey());
+                    write.setBoolean(3, decision.included());
+                    write.addBatch();
+                    updated.put(id, decision);
+                }
+                write.executeBatch();
+            }
+            return Map.copyOf(updated);
+        });
     }
 
     List<Course> load() throws SQLException {

@@ -40,8 +40,8 @@ final class Calculation {
         var inputs = prepare(simulation);
         Projection selected = solve(inputs, simulation.target());
         List<GradeRequirement> grades = new ArrayList<>();
-        for (Grade grade : Grade.values()) {
-            grades.add(new GradeRequirement(grade, solve(inputs, grade.boundary)));
+        for (Grade grade : simulation.scale().grades()) {
+            grades.add(new GradeRequirement(grade, solve(inputs, grade.boundary())));
         }
         return new TargetReport(selected, List.copyOf(grades));
     }

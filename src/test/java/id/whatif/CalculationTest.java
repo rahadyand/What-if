@@ -70,7 +70,7 @@ class CalculationTest {
         Exact result = actual(totalCourse(category, List.of(bonus)));
         assertEquals(Exact.of(110), result);
         assertEquals(Grade.A, Grade.classify(result));
-        assertEquals(num("4.00"), Grade.classify(result).point);
+        assertEquals(num("4.00"), Grade.classify(result).point());
     }
 
     @Test void gradeThresholdsUseExactUnroundedPercent() {
@@ -78,7 +78,7 @@ class CalculationTest {
         assertEquals(Grade.A_MINUS, Grade.classify(actual(totalCourse(category, List.of(row(category, "100", "84.5"))))));
         assertEquals(Grade.A_MINUS, Grade.classify(Exact.of(num("84.9999999999999999999"))));
         for (Grade grade : Grade.values()) {
-            assertEquals(grade, Grade.classify(Exact.of(grade.boundary)));
+            assertEquals(grade, Grade.classify(Exact.of(grade.boundary())));
         }
     }
 

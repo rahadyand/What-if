@@ -16,20 +16,21 @@ import javafx.scene.layout.VBox;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
 final class TargetSummary extends VBox {
-    private static final Set<Grade> COMMON_TARGETS = EnumSet.of(Grade.A, Grade.A_MINUS, Grade.B_PLUS, Grade.B);
+    private static final Set<String> COMMON_TARGETS = Set.of("A", "A-", "B+", "B");
     private final VBox selected = new VBox(7);
     private final GridPane grades = new GridPane();
     private final Button toggle = new Button();
     private final VBox recommendations;
     private boolean showAll;
+    private final GradeScale currentScale;
 
-    TargetSummary(Course course, List<Scenario> alternatives) {
+    TargetSummary(Course course, GradeScale currentScale, List<Scenario> alternatives) {
         super(11);
+        this.currentScale = currentScale;
         setId("target-summary");
         getStyleClass().add("target-summary");
         selected.setId("selected-target-card");
@@ -50,7 +51,7 @@ final class TargetSummary extends VBox {
         getChildren().addAll(WhatIfApp.heading("Ringkasan Target Nilai", "section-title"), selected, recommendations);
         if (alternatives.size() >= 2) {
             TitledPane comparison = new TitledPane("Bandingkan dua skenario tersimpan",
-                    ScenarioComparison.panel(course, alternatives, true));
+                    ScenarioComparison.panel(course, currentScale, alternatives, true));
             comparison.setExpanded(false);
             comparison.setAnimated(false);
             comparison.setId("target-summary-comparison");
@@ -60,11 +61,11 @@ final class TargetSummary extends VBox {
 
     void render(Simulation simulation, Scenario opened, Course current, Calculation.TargetReport report, String error) {
         String context = opened == null ? "" : "Skenario " + opened.name();
-        if (!simulation.baseline().sameGradeInputs(current)) context = addContext(context, "Data dasar lama");
+        if (!simulation.matchesBaseline(current, currentScale)) context = addContext(context, "Data dasar lama");
         if (simulation.baseline().legacyWeights()) context = addContext(context, "Bobot relatif lama");
 
         BigDecimal minimum = error.isBlank() ? simulation.target() : null;
-        String title = minimum == null ? "Target belum valid" : targetTitle(minimum);
+        String title = minimum == null ? "Target belum valid" : targetTitle(minimum, simulation.scale());
         Label target = Editor.note(title, "target-highlight-heading");
         selected.getChildren().setAll(target);
         if (report == null || report.selected().status() == Calculation.Status.EMPTY) {
@@ -80,17 +81,18 @@ final class TargetSummary extends VBox {
         List<Assessment> free = simulation.rows().stream().filter(row -> !row.excluded() && row.value().earned() == null)
                 .map(Simulation.Row::value).toList();
         Calculation.Projection projection = report.selected();
+        GradeScale scale = simulation.scale();
         selected.getChildren().setAll(spread(target, statusBadge(projection.status())));
         if (!context.isEmpty()) selected.getChildren().add(Editor.note(context, "muted"));
         if (free.isEmpty()) {
-            selected.getChildren().add(new VBox(1, Editor.note(result(projection.percent()), "metric"),
+            selected.getChildren().add(new VBox(1, Editor.note(result(projection.percent(), scale), "metric"),
                     Editor.note("Hasil dari skor tetap", "muted")));
         } else {
-            selected.getChildren().add(scoreOverview(projection, free));
+            selected.getChildren().add(scoreOverview(projection, free, scale));
         }
 
         if (projection.status() == Calculation.Status.UNREACHABLE) {
-            selected.getChildren().add(Editor.note(shortfall(minimum, projection, free), "validation"));
+            selected.getChildren().add(Editor.note(shortfall(minimum, projection, free, scale), "validation"));
         } else if (!free.isEmpty() && projection.status() == Calculation.Status.WITH_SUGGESTIONS) {
             String rounding = wholePointNote(projection, free);
             if (!rounding.isEmpty()) selected.getChildren().add(Editor.note(rounding, "muted"));
@@ -108,7 +110,7 @@ final class TargetSummary extends VBox {
         });
     }
 
-    private static HBox scoreOverview(Calculation.Projection projection, List<Assessment> free) {
+    private static HBox scoreOverview(Calculation.Projection projection, List<Assessment> free, GradeScale scale) {
         VBox required = new VBox(2);
         boolean unreachable = projection.status() == Calculation.Status.UNREACHABLE;
         if (free.size() == 1) {
@@ -126,11 +128,11 @@ final class TargetSummary extends VBox {
             }
         }
         if (projection.status() == Calculation.Status.WITH_SUGGESTIONS) {
-            required.getChildren().add(Editor.note("Proyeksi dengan skor saran " + result(projection.percent()), "muted"));
+            required.getChildren().add(Editor.note("Proyeksi dengan skor saran " + result(projection.percent(), scale), "muted"));
         }
 
         VBox maximum = new VBox(2, Editor.note("Nilai akhir tertinggi", "field-label"),
-                Editor.note(result(projection.maximum()), "target-normal-value"));
+                Editor.note(result(projection.maximum(), scale), "target-normal-value"));
         if (!unreachable) {
             maximum.getChildren().add(Editor.note("Jika semua penilaian tersisa mendapat skor maksimum normal.", "muted"));
         }
@@ -144,9 +146,9 @@ final class TargetSummary extends VBox {
         return comparison;
     }
 
-    private static String shortfall(BigDecimal target, Calculation.Projection projection, List<Assessment> free) {
-        Grade grade = Grade.classify(Exact.of(target));
-        String label = target.compareTo(grade.boundary) == 0 ? letter(grade) : Numbers.display(target) + "%";
+    private static String shortfall(BigDecimal target, Calculation.Projection projection, List<Assessment> free, GradeScale scale) {
+        Grade grade = scale.classify(Exact.of(target));
+        String label = target.compareTo(grade.boundary()) == 0 ? letter(grade) : Numbers.display(target) + "%";
         String condition = switch (free.size()) {
             case 0 -> "";
             case 1 -> " meskipun " + free.getFirst().name() + " mendapat "
@@ -164,9 +166,12 @@ final class TargetSummary extends VBox {
         grades.addRow(0, gradeCell(Editor.note("Huruf", "field-label"), true),
                 gradeCell(Editor.note(scoreHeading, "field-label"), true),
                 gradeCell(Editor.note("Status", "field-label"), true));
+        var common = entries.stream().filter(entry -> COMMON_TARGETS.contains(entry.grade().letter())).toList();
+        var visible = showAll ? entries : common.isEmpty() ? entries.stream().limit(4).toList() : common;
+        toggle.setVisible(visible.size() != entries.size() || showAll);
+        toggle.setManaged(toggle.isVisible());
         int index = 1;
-        for (var entry : entries) {
-            if (!showAll && !COMMON_TARGETS.contains(entry.grade())) continue;
+        for (var entry : visible) {
             var projection = entry.projection();
             String required = switch (free.size()) {
                 case 0 -> "—";
@@ -234,13 +239,13 @@ final class TargetSummary extends VBox {
 
     private static String addContext(String before, String item) { return before.isEmpty() ? item : before + " · " + item; }
 
-    private static String targetTitle(BigDecimal minimum) {
-        return "Target " + letter(Grade.classify(Exact.of(minimum))) + " · " + Numbers.display(minimum) + "%";
+    private static String targetTitle(BigDecimal minimum, GradeScale scale) {
+        return "Target " + letter(scale.classify(Exact.of(minimum))) + " · " + Numbers.display(minimum) + "%";
     }
 
     private static String letter(Grade grade) { return grade.toString().replace('-', '−'); }
 
-    private static String result(Exact percentage) {
-        return ResultText.percent(percentage) + " (" + letter(Grade.classify(percentage)) + ")";
+    private static String result(Exact percentage, GradeScale scale) {
+        return ResultText.percent(percentage) + " (" + letter(scale.classify(percentage)) + ")";
     }
 }

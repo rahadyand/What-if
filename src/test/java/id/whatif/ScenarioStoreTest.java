@@ -19,7 +19,7 @@ class ScenarioStoreTest {
 
     @Test void suggestsTheExactGradeBoundaryOrLocalizedPercentage() {
         for (Grade grade : Grade.values()) {
-            assertEquals("Target " + grade, Scenario.suggestedName(grade.boundary.setScale(2)));
+            assertEquals("Target " + grade, Scenario.suggestedName(grade.boundary().setScale(2)));
         }
         assertEquals("Target 84,5%", Scenario.suggestedName(decimal("84.50")));
         assertEquals("Target 79,999%", Scenario.suggestedName(decimal("79.999")));

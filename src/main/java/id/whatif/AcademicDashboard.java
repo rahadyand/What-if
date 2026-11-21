@@ -7,18 +7,22 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.layout.Region;
 
 import java.util.List;
 import java.util.function.BiConsumer;
 
 final class AcademicDashboard extends VBox {
-    AcademicDashboard(Semester semester, boolean active, List<Course> courses, Runnable addSemester,
+    AcademicDashboard(Semester semester, boolean active, List<Course> courses, HBox indexCards, Runnable configureScale, Runnable addSemester,
                       Runnable editSemester, Runnable makeActive, Runnable addCourse, BiConsumer<Course, Boolean> openCourse) {
         super(17);
         setId("academic-dashboard");
         getStyleClass().addAll("page", "academic-dashboard");
 
-        HBox welcome = new HBox(12, WhatIfApp.heading("Welcome to", "page-title"), WhatIfApp.wordmark(166));
+        Region fill = new Region();
+        HBox.setHgrow(fill, Priority.ALWAYS);
+        HBox welcome = new HBox(12, WhatIfApp.heading("Welcome to", "page-title"), WhatIfApp.wordmark(166),
+                fill, WhatIfApp.button("Pengaturan Skala Nilai", configureScale));
         welcome.setAlignment(Pos.CENTER_LEFT);
         welcome.getStyleClass().add("dashboard-welcome");
         getChildren().add(welcome);
@@ -46,7 +50,7 @@ final class AcademicDashboard extends VBox {
         long missingSks = courses.stream().filter(course -> course.academic().sks() == null).count();
         HBox totals = new HBox(12, metric("Mata kuliah", courses.size(), ""),
                 metric("Total SKS tercatat", totalSks, missingSks == 0 ? "" : missingSks + " mata kuliah belum mencatat SKS"));
-        getChildren().add(totals);
+        getChildren().addAll(totals, indexCards);
 
         if (courses.isEmpty()) {
             String state = semester == null ? "Belum ada semester" : "Belum ada mata kuliah";

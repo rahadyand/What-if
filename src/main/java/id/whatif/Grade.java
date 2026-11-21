@@ -1,28 +1,41 @@
 package id.whatif;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
+import java.util.Locale;
 
-enum Grade {
-    A("A", 85, "4.00"), A_MINUS("A-", 80, "3.70"), B_PLUS("B+", 75, "3.30"),
-    B("B", 70, "3.00"), C_PLUS("C+", 65, "2.70"), C("C", 60, "2.00"),
-    D("D", 55, "1.00"), E("E", 0, "0.00");
+record Grade(String letter, BigDecimal boundary, BigDecimal point) {
+    static final Grade A = initial("A", 85, "4.00");
+    static final Grade A_MINUS = initial("A-", 80, "3.70");
+    static final Grade B_PLUS = initial("B+", 75, "3.30");
+    static final Grade B = initial("B", 70, "3.00");
+    static final Grade C_PLUS = initial("C+", 65, "2.70");
+    static final Grade C = initial("C", 60, "2.00");
+    static final Grade D = initial("D", 55, "1.00");
+    static final Grade E = initial("E", 0, "0.00");
 
-    private final String label;
-    final BigDecimal boundary;
-    final BigDecimal point;
-
-    Grade(String label, int boundary, String point) {
-        this.label = label;
-        this.boundary = BigDecimal.valueOf(boundary);
-        this.point = new BigDecimal(point);
+    Grade {
+        letter = normalizeLetter(letter);
+        if (letter.isEmpty()) throw new IllegalArgumentException("Huruf nilai wajib diisi.");
+        boundary = Numbers.validate(boundary, "Persentase minimum", false);
+        point = normalizePoints(point);
     }
 
-    static Grade classify(Exact percent) {
-        return Arrays.stream(values())
-                .filter(grade -> percent.compareTo(Exact.of(grade.boundary)) >= 0)
-                .findFirst().orElseThrow();
+    static String normalizeLetter(String letter) {
+        return letter.strip().replace('−', '-').toUpperCase(Locale.ROOT);
     }
 
-    @Override public String toString() { return label; }
+    static BigDecimal normalizePoints(BigDecimal point) {
+        BigDecimal value = Numbers.validate(point, "Angka mutu", false);
+        return value.setScale(Math.max(2, value.scale()));
+    }
+
+    private static Grade initial(String letter, int minimum, String points) {
+        return new Grade(letter, BigDecimal.valueOf(minimum), new BigDecimal(points));
+    }
+
+    static Grade[] values() { return new Grade[] { A, A_MINUS, B_PLUS, B, C_PLUS, C, D, E }; }
+
+    static Grade classify(Exact percent) { return GradeScale.DEFAULT.classify(percent); }
+
+    @Override public String toString() { return letter; }
 }

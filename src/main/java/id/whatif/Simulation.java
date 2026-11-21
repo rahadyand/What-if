@@ -12,18 +12,23 @@ import java.util.UUID;
 
 /** A private working copy of a single immutable course with its own target and rows. */
 final class Simulation {
-    private static final BigDecimal DEFAULT_TARGET = Grade.A.boundary;
     private final Course baseline;
+    private final GradeScale scale;
     private final LinkedHashMap<UUID, Row> rows = new LinkedHashMap<>();
     private String targetInput;
 
     Simulation(Course baseline) {
+        this(baseline, GradeScale.DEFAULT);
+    }
+
+    Simulation(Course baseline, GradeScale scale) {
         this.baseline = Objects.requireNonNull(baseline);
+        this.scale = Objects.requireNonNull(scale);
         reset();
     }
 
     static Simulation from(State state) {
-        Simulation simulation = new Simulation(state.baseline());
+        Simulation simulation = new Simulation(state.baseline(), state.scale());
         simulation.targetInput(state.target());
         for (Row row : state.rows()) {
             simulation.put(row.value(), row.assumption());
@@ -32,11 +37,15 @@ final class Simulation {
         return simulation;
     }
 
-    State state() { return new State(baseline, targetInput, rows()); }
+    State state() { return new State(baseline, targetInput, rows(), scale); }
 
     Review reviewBaseline(Course current) {
+        return reviewBaseline(current, GradeScale.DEFAULT);
+    }
+
+    Review reviewBaseline(Course current, GradeScale currentScale) {
         if (!baseline.id().equals(current.id())) throw new IllegalArgumentException("Mata kuliah berbeda.");
-        Simulation refreshed = new Simulation(current);
+        Simulation refreshed = new Simulation(current, currentScale);
         refreshed.targetInput(targetInput);
         List<String> notes = new ArrayList<>();
         var currentRows = new HashMap<UUID, Assessment>();
@@ -78,12 +87,17 @@ final class Simulation {
     }
 
     Course baseline() { return baseline; }
+    GradeScale scale() { return scale; }
+
+    boolean matchesBaseline(Course current, GradeScale currentScale) {
+        return baseline.sameGradeInputs(current) && scale.equals(currentScale);
+    }
     List<Row> rows() { return List.copyOf(rows.values()); }
     String targetInput() { return targetInput; }
     BigDecimal target() { return Numbers.read(targetInput, "Target persentase", false, false); }
 
     void targetInput(String text) { targetInput = Objects.requireNonNull(text); }
-    void chooseGrade(Grade grade) { targetInput = Numbers.display(grade.boundary); }
+    void chooseGrade(Grade grade) { targetInput = Numbers.display(grade.boundary()); }
 
     void put(Assessment value, boolean assumption) {
         baseline.categoryName(value.categoryId());
@@ -115,12 +129,12 @@ final class Simulation {
     void reset() {
         rows.clear();
         for (Assessment assessment : baseline.assessments()) rows.put(assessment.id(), original(assessment));
-        targetInput = Numbers.display(DEFAULT_TARGET);
+        targetInput = Numbers.display(scale.defaultTarget());
     }
 
     boolean modified() {
         try {
-            if (target().compareTo(DEFAULT_TARGET) != 0) return true;
+            if (target().compareTo(scale.defaultTarget()) != 0) return true;
         } catch (IllegalArgumentException invalid) {
             return true;
         }
@@ -131,11 +145,12 @@ final class Simulation {
         return new Row(assessment, assessment, false, false);
     }
 
-    record State(Course baseline, String target, List<Row> rows) {
+    record State(Course baseline, String target, List<Row> rows, GradeScale scale) {
         State {
             baseline = Objects.requireNonNull(baseline).withAcademic(AcademicDetails.EMPTY);
             Objects.requireNonNull(target);
             rows = List.copyOf(rows);
+            Objects.requireNonNull(scale);
         }
     }
 
