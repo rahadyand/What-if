@@ -11,10 +11,14 @@ import javafx.scene.layout.Region;
 
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 final class AcademicDashboard extends VBox {
-    AcademicDashboard(Semester semester, boolean active, List<Course> courses, HBox indexCards, Runnable configureScale, Runnable addSemester,
-                      Runnable editSemester, Runnable makeActive, Runnable addCourse, BiConsumer<Course, Boolean> openCourse) {
+    AcademicDashboard(Semester semester, boolean active, List<Course> courses, VBox indexCards, DashboardProjection.Report projection,
+                      Runnable configureScale, Runnable addSemester,
+                      Runnable editSemester, Runnable makeActive, Runnable addCourse,
+                      BiConsumer<Course, Boolean> openCourse, Consumer<Course> choose,
+                      BiConsumer<Course, Scenario> review) {
         super(17);
         setId("academic-dashboard");
         getStyleClass().addAll("page", "academic-dashboard");
@@ -45,11 +49,15 @@ final class AcademicDashboard extends VBox {
         }
         getChildren().add(actions);
 
-        long totalSks = courses.stream().map(Course::academic).filter(details -> details.sks() != null)
-                .mapToLong(details -> details.sks()).sum();
+        long totalSks = SemesterSks.recorded(semester == null ? null : semester.id(), courses);
         long missingSks = courses.stream().filter(course -> course.academic().sks() == null).count();
-        HBox totals = new HBox(12, metric("Mata kuliah", courses.size(), ""),
-                metric("Total SKS tercatat", totalSks, missingSks == 0 ? "" : missingSks + " mata kuliah belum mencatat SKS"));
+        String totalText = semester == null ? totalSks + " SKS" : totalSks + " / " + SemesterSks.LIMIT + " SKS";
+        String creditNotes = missingSks == 0 ? "" : missingSks + " mata kuliah belum mencatat SKS";
+        boolean over = semester != null && totalSks > SemesterSks.LIMIT;
+        if (over) creditNotes = "Melebihi batas " + (totalSks - SemesterSks.LIMIT) + " SKS."
+                + (creditNotes.isEmpty() ? "" : " " + creditNotes);
+        HBox totals = new HBox(12, metric("Mata kuliah", Integer.toString(courses.size()), "", false),
+                metric("Total SKS tercatat", totalText, creditNotes, over));
         getChildren().addAll(totals, indexCards);
 
         if (courses.isEmpty()) {
@@ -74,13 +82,15 @@ final class AcademicDashboard extends VBox {
         if (semester == null) {
             list.getChildren().add(Editor.note("Pilih Nilai Aktual lalu Pengaturan untuk melengkapi semester, SKS, dan kehadiran.", "muted"));
         }
-        for (Course course : courses) list.getChildren().add(courseRow(course, openCourse));
+        for (Course course : courses) {
+            list.getChildren().add(courseRow(course, projection.rows().get(course.id()), openCourse, choose, review));
+        }
         getChildren().add(list);
     }
 
-    private static VBox metric(String title, long value, String supplementary) {
-        VBox card = new VBox(3, Editor.note(title, "field-label"), Editor.note(Long.toString(value), "metric"));
-        if (!supplementary.isEmpty()) card.getChildren().add(Editor.note(supplementary, "muted"));
+    private static VBox metric(String title, String value, String supplementary, boolean warning) {
+        VBox card = new VBox(3, Editor.note(title, "field-label"), Editor.note(value, "dashboard-total"));
+        if (!supplementary.isEmpty()) card.getChildren().add(Editor.note(supplementary, warning ? "validation" : "muted"));
         card.setPrefWidth(200);
         card.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(card, Priority.ALWAYS);
@@ -88,7 +98,9 @@ final class AcademicDashboard extends VBox {
         return card;
     }
 
-    private static HBox courseRow(Course course, BiConsumer<Course, Boolean> openCourse) {
+    private static HBox courseRow(Course course, DashboardProjection.Row state,
+                                 BiConsumer<Course, Boolean> openCourse, Consumer<Course> choose,
+                                 BiConsumer<Course, Scenario> review) {
         Label title = Editor.note(course.name(), "field-label");
         VBox info = new VBox(3, title, Editor.note(course.academic().sksText(), "muted"));
         info.setMinWidth(0);
@@ -97,7 +109,19 @@ final class AcademicDashboard extends VBox {
         actual.setAccessibleText("Nilai Aktual untuk " + course.name());
         Button whatIf = WhatIfApp.button("What If", () -> openCourse.accept(course, true));
         whatIf.setAccessibleText("What If untuk " + course.name());
-        HBox row = new HBox(9, info, actual, whatIf);
+        HBox row = new HBox(8, info, actual, whatIf);
+        if (state != null) {
+            info.getChildren().add(Editor.note(state.display(), state.choice() != null && !state.usable() ? "validation" : "muted"));
+            if (state.confirmed() == null) {
+                Button pick = WhatIfApp.button(state.choice() == null ? "Pilih skenario" : "Ganti skenario", () -> choose.accept(course));
+                pick.setAccessibleText("Kelola skenario dashboard untuk " + course.name());
+                row.getChildren().add(1, pick);
+                if (state.snapshot() != null && !state.usable()) {
+                    whatIf.setText("Tinjau What If");
+                    whatIf.setOnAction(event -> review.accept(course, state.snapshot()));
+                }
+            }
+        }
         row.setId("dashboard-course-" + course.id());
         row.setAlignment(Pos.CENTER_LEFT);
         row.getStyleClass().add("dashboard-course");

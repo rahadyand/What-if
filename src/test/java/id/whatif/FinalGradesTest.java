@@ -139,7 +139,7 @@ class FinalGradesTest {
         byte[] bytes = oldSnapshot(course);
         Path db = directory.resolve("previous.sqlite3");
         try (var c = DriverManager.getConnection("jdbc:sqlite:" + db); var sql = c.createStatement()) {
-            for (String table : List.of("ipk_repeat_reviews", "confirmed_grades", "grade_scale_rows", "grade_scale_settings")) {
+            for (String table : List.of("projected_repeat_reviews", "dashboard_scenarios", "ipk_repeat_reviews", "confirmed_grades", "grade_scale_rows", "grade_scale_settings")) {
                 sql.execute("DROP TABLE " + table);
             }
             sql.execute("PRAGMA user_version=2");

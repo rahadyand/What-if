@@ -19,14 +19,18 @@ final class AcademicAverage {
                 .filter(course -> id.equals(course.academic().semesterId())).toList();
         var available = eligible(members, finals);
         var missing = missing(members, finals);
-        long recorded = members.stream().filter(course -> course.academic().sks() != null)
-                .mapToLong(course -> course.academic().sks()).sum();
+        long recorded = id == null ? 0 : SemesterSks.recorded(id, members);
         return new SemesterResult(summarize(available), recorded, missing.sks(), missing.finalGrade(),
                 !members.isEmpty() && available.size() == members.size());
     }
 
     static Cumulative ipk(List<Course> courses, Map<UUID, FinalGrade> finals, Map<UUID, RepeatDecision> decisions) {
-        var candidates = eligible(courses, finals);
+        var selection = reviewRepeats(eligible(courses, finals), decisions, Map.of());
+        return new Cumulative(selection.result(), missing(courses, finals), selection.repeats());
+    }
+
+    static Selection reviewRepeats(List<Contribution> candidates, Map<UUID, RepeatDecision> actual,
+                                   Map<ProjectedRepeatKey, Boolean> projected) {
         var groups = new LinkedHashMap<String, List<Contribution>>();
         for (var entry : candidates) {
             String name = entry.course().name().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
@@ -40,15 +44,23 @@ final class AcademicAverage {
                 continue;
             }
             String key = group.stream().map(entry -> entry.course().id().toString()).sorted().collect(Collectors.joining(","));
-            boolean reviewed = group.stream().map(entry -> decisions.get(entry.course().id()))
-                    .allMatch(decision -> decision != null && decision.groupKey().equals(key));
-            if (reviewed) group.stream().filter(entry -> decisions.get(entry.course().id()).included()).forEach(included::add);
+            boolean hasProjection = group.stream().anyMatch(Contribution::projected);
+            Map<UUID, Boolean> choices = new LinkedHashMap<>();
+            for (var entry : group) {
+                UUID id = entry.course().id();
+                RepeatDecision decision = actual.get(id);
+                Boolean include = hasProjection ? projected.get(new ProjectedRepeatKey(key, id))
+                        : decision != null && decision.groupKey().equals(key) ? Boolean.valueOf(decision.included()) : null;
+                if (include != null) choices.put(id, include);
+            }
+            boolean reviewed = group.size() == choices.size();
+            if (reviewed) group.stream().filter(entry -> choices.get(entry.course().id())).forEach(included::add);
             repeats.add(new RepeatGroup(key, List.copyOf(group), reviewed));
         }
-        return new Cumulative(summarize(included), missing(courses, finals), List.copyOf(repeats));
+        return new Selection(summarize(included), List.copyOf(repeats));
     }
 
-    private static List<Contribution> eligible(List<Course> courses, Map<UUID, FinalGrade> finals) {
+    static List<Contribution> eligible(List<Course> courses, Map<UUID, FinalGrade> finals) {
         return courses.stream().filter(course -> course.academic().semesterId() != null && course.academic().sks() != null)
                 .map(course -> {
                     FinalGrade grade = finals.get(course.id());
@@ -62,15 +74,20 @@ final class AcademicAverage {
                 courses.stream().filter(course -> !finals.containsKey(course.id())).count());
     }
 
-    private static Result summarize(List<Contribution> courses) {
+    static Result summarize(List<Contribution> courses) {
         long sks = courses.stream().mapToLong(Contribution::sks).sum();
         BigDecimal weighted = courses.stream().map(Contribution::weighted).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new Result(List.copyOf(courses), sks, weighted);
     }
 
-    record Contribution(Course course, FinalGrade grade) {
+    record Contribution(Course course, String letter, BigDecimal points, String source, boolean projected) {
+        Contribution(Course course, FinalGrade grade) {
+            this(course, grade.letter(), grade.points(), "Nilai final · " + grade.source(), false);
+        }
+
         int sks() { return course.academic().sks(); }
-        BigDecimal weighted() { return grade.points().multiply(BigDecimal.valueOf(sks())); }
+        BigDecimal weighted() { return points.multiply(BigDecimal.valueOf(sks())); }
+        String pointText() { return points.toPlainString().replace('.', ','); }
     }
 
     record Result(List<Contribution> courses, long sks, BigDecimal weighted) {
@@ -84,5 +101,9 @@ final class AcademicAverage {
     record Missing(long semester, long sks, long finalGrade) {}
     record Cumulative(Result result, Missing missing, List<RepeatGroup> repeats) {}
     record RepeatDecision(String groupKey, boolean included) {}
-    record RepeatGroup(String key, List<Contribution> courses, boolean reviewed) {}
+    record Selection(Result result, List<RepeatGroup> repeats) {}
+    record ProjectedRepeatKey(String groupKey, UUID courseId) {}
+    record RepeatGroup(String key, List<Contribution> courses, boolean reviewed) {
+        boolean projected() { return courses.stream().anyMatch(Contribution::projected); }
+    }
 }

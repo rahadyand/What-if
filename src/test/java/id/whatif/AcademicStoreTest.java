@@ -29,7 +29,7 @@ class AcademicStoreTest {
 
         var store = new CourseStore(db);
         store.initialize();
-        assertEquals("3", scalar(db, "PRAGMA user_version"));
+        assertEquals("4", scalar(db, "PRAGMA user_version"));
         assertEquals(List.of(original), store.load());
         assertEquals(new CourseStore.SemesterSelection(List.of(), null), store.loadSemesters());
         assertEquals(List.of(scenario), store.loadScenarios());

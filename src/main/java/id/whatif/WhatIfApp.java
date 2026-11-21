@@ -58,6 +58,8 @@ public final class WhatIfApp extends Application {
     private Simulation simulation;
     private Scenario openedScenario;
     private List<Scenario> scenarios = List.of();
+    private Map<UUID, String> invalidScenarios = Map.of();
+    private DashboardProjection.Settings projectionSettings = new DashboardProjection.Settings(Map.of(), Map.of());
     private GradeScale activeScale = GradeScale.DEFAULT;
     private final Map<UUID, FinalGrade> finals = new HashMap<>();
     private Map<UUID, AcademicAverage.RepeatDecision> repeatDecisions = Map.of();
@@ -155,13 +157,16 @@ public final class WhatIfApp extends Application {
         showEmpty("Memuat mata kuliah…", "Membuka penyimpanan lokal.", null);
         runIo(() -> {
             store.initialize();
-            return new Workspace(store.load(), store.loadScenarios(), store.loadSemesters(), store.loadGrading());
+            return new Workspace(store.load(), store.loadScenarioCatalog(), store.loadSemesters(), store.loadGrading(),
+                    store.loadProjectionSettings());
         }, loaded -> {
             busy = false;
             sidebar.setDisable(false);
             courses.clear();
             courses.addAll(loaded.courses());
-            scenarios = loaded.scenarios();
+            scenarios = loaded.catalog().scenarios();
+            invalidScenarios = loaded.catalog().invalid();
+            projectionSettings = loaded.projectionSettings();
             activeScale = loaded.grading().scale();
             finals.clear();
             finals.putAll(loaded.grading().finals());
@@ -198,12 +203,49 @@ public final class WhatIfApp extends Application {
         List<Course> grouped = courses.stream().filter(item -> Objects.equals(viewedSemester, item.academic().semesterId())).toList();
         var index = AcademicAverage.semester(viewedSemester, courses, finals);
         var cumulative = AcademicAverage.ipk(courses, finals, repeatDecisions);
-        var dashboard = new AcademicDashboard(viewed, viewed != null && viewed.id().equals(activeSemester), grouped,
-                AcademicIndexView.cards(viewed, index, cumulative, () -> showIpkDetails(cumulative)), this::editScale,
-                () -> editSemester(null), () -> editSemester(viewed), () -> activateSemester(viewed),
-                () -> editCourse(null, viewedSemester), this::openCourse);
+        var report = DashboardProjection.evaluate(viewedSemester, courses, finals, activeScale,
+                new Scenario.Catalog(scenarios, invalidScenarios), projectionSettings, repeatDecisions);
+        VBox indices = new VBox(10, AcademicIndexView.cards(viewed, index, cumulative, () -> showIpkDetails(cumulative)));
+        if (report.hasUnfinished()) {
+            indices.getChildren().add(ProjectionView.cards(report, viewed.toString(), () ->
+                    ProjectionView.details(stage, viewed, report, this::semesterName, group -> reviewRepeat(viewed.id(), group))));
+        }
+        var dashboard = new AcademicDashboard(viewed, viewed != null && viewed.id().equals(activeSemester), grouped, indices, report,
+                this::editScale, () -> editSemester(null), () -> editSemester(viewed), () -> activateSemester(viewed),
+                () -> editCourse(null, viewedSemester), this::openCourse,
+                selected -> chooseProjection(selected, report.rows().get(selected.id())), this::reviewDashboardScenario);
         root.setCenter(verticalScroll(dashboard, "dashboard-scroll"));
         updateSidebar();
+    }
+
+    private void chooseProjection(Course selected, DashboardProjection.Row row) {
+        var available = scenarios.stream().filter(item -> item.courseId().equals(selected.id())).toList();
+        ProjectionView.choose(stage, selected, row, available, (choice, success, failure) ->
+                saveGrading(() -> {
+                    store.saveProjectionChoice(selected.id(), row.choice(), choice.id());
+                    return choice;
+                }, saved -> {
+                    var selections = new HashMap<>(projectionSettings.selections());
+                    if (saved.id() == null) selections.remove(selected.id());
+                    else selections.put(selected.id(), saved.id());
+                    projectionSettings = new DashboardProjection.Settings(Map.copyOf(selections), projectionSettings.reviews());
+                    refreshDashboard();
+                }, success, failure));
+    }
+
+    private void refreshDashboard() {
+        double position = root.getCenter() instanceof ScrollPane scroll ? scroll.getVvalue() : 0;
+        showDashboard();
+        ((ScrollPane) root.getCenter()).setVvalue(position);
+    }
+
+    private void reviewDashboardScenario(Course next, Scenario saved) {
+        if (!confirmTransition("Tinjau skenario")) return;
+        course = next;
+        viewedSemester = next.academic().semesterId();
+        invalidDraft = false;
+        updateSidebar();
+        openScenario(saved);
     }
 
     private void openCourse(Course next, boolean whatIf) {
@@ -341,7 +383,10 @@ public final class WhatIfApp extends Application {
         rebase.setOnAction(event -> reviewBaseline());
         MenuItem inspect = new MenuItem("Lihat data dasar");
         inspect.setOnAction(event -> inspectBaseline());
-        options.getItems().setAll(copy, compare, inspect, rebase);
+        MenuItem delete = new MenuItem("Hapus skenario tersimpan");
+        delete.setDisable(openedScenario == null);
+        delete.setOnAction(event -> deleteOpenedScenario());
+        options.getItems().setAll(copy, compare, inspect, rebase, delete);
         scenarioStatus = label("", "muted");
         scenarioStatus.setWrapText(true);
         HBox.setHgrow(scenarioStatus, Priority.ALWAYS);
@@ -358,6 +403,19 @@ public final class WhatIfApp extends Application {
         openedScenario = saved;
         simulation = saved == null ? new Simulation(course, activeScale) : Simulation.from(saved.state());
         showCourse(null);
+    }
+
+    private void deleteOpenedScenario() {
+        Scenario expected = openedScenario;
+        if (expected == null || !confirm(stage, "Hapus skenario",
+                "Hapus “" + expected.name() + "” dan tutup draf ini?", "Hapus skenario")) return;
+        saveGrading(() -> {
+            store.deleteScenario(expected);
+            return expected;
+        }, removed -> {
+            scenarios = scenarios.stream().filter(item -> !item.id().equals(removed.id())).toList();
+            openScenario(null);
+        }, () -> {}, message -> errorAlert(stage, message));
     }
 
     private boolean saveScenario(boolean copy, boolean redraw) {
@@ -856,17 +914,34 @@ public final class WhatIfApp extends Application {
         }, success, failure));
     }
 
+    private String semesterName(UUID id) {
+        Semester item = semester(id);
+        return item == null ? AcademicDetails.UNGROUPED : item.toString();
+    }
+
     private void showIpkDetails(AcademicAverage.Cumulative cumulative) {
-        Function<UUID, String> name = id -> {
-            Semester item = semester(id);
-            return item == null ? AcademicDetails.UNGROUPED : item.toString();
+        AcademicIndexView.breakdown(stage, cumulative, this::semesterName, group -> reviewRepeat(null, group));
+    }
+
+    private void reviewRepeat(UUID semester, AcademicAverage.RepeatGroup group) {
+        Function<UUID, Boolean> included = id -> {
+            if (group.projected()) return projectionSettings.reviews().get(new AcademicAverage.ProjectedRepeatKey(group.key(), id));
+            var decision = repeatDecisions.get(id);
+            return decision != null && decision.groupKey().equals(group.key()) && decision.included();
         };
-        AcademicIndexView.breakdown(stage, cumulative, name, group ->
-                AcademicIndexView.review(stage, group, repeatDecisions, name, (selected, success, failure) ->
-                        saveGrading(() -> store.saveRepeatReview(group, repeatDecisions, selected), saved -> {
-                            repeatDecisions = saved;
-                            showDashboard();
-                        }, success, failure)));
+        AcademicIndexView.review(stage, group, included, this::semesterName, (selected, success, failure) -> {
+            if (group.projected()) {
+                saveGrading(() -> store.saveProjectedRepeatReview(semester, group, projectionSettings.reviews(), selected), saved -> {
+                    projectionSettings = new DashboardProjection.Settings(projectionSettings.selections(), saved);
+                    refreshDashboard();
+                }, success, failure);
+            } else {
+                saveGrading(() -> store.saveRepeatReview(group, repeatDecisions, selected), saved -> {
+                    repeatDecisions = saved;
+                    refreshDashboard();
+                }, success, failure);
+            }
+        });
     }
 
     private <T> void saveGrading(Callable<T> write, Consumer<T> update, Runnable success, Consumer<String> failure) {
@@ -886,7 +961,7 @@ public final class WhatIfApp extends Application {
 
     private void editCourse(Course previous, UUID initialSemester) {
         if (previous == null && !confirmTransition("Tambah mata kuliah")) return;
-        Editor.course(stage, previous, semesters, initialSemester, previous == null ? ignored -> {} : this::invalidDraft,
+        Editor.course(stage, previous, semesters, List.copyOf(courses), initialSemester, previous == null ? ignored -> {} : this::invalidDraft,
                 (draft, success, failure) -> save(previous, draft, null, success, failure));
     }
 
@@ -984,6 +1059,9 @@ public final class WhatIfApp extends Application {
             busy = false;
             courses.remove(selected);
             finals.remove(selected.id());
+            var selections = new HashMap<>(projectionSettings.selections());
+            selections.remove(selected.id());
+            projectionSettings = new DashboardProjection.Settings(Map.copyOf(selections), projectionSettings.reviews());
             scenarios = scenarios.stream().filter(item -> !item.courseId().equals(selected.id())).toList();
             course = null;
             viewedSemester = selected.academic().semesterId();
@@ -1030,7 +1108,7 @@ public final class WhatIfApp extends Application {
                     || detail.startsWith("Versi basis data") || detail.startsWith("Skema basis data")
                     || detail.startsWith("Basis data rusak") || detail.startsWith("Data skenario")
                     || detail.startsWith("Data mata kuliah") || detail.startsWith("Data semester")
-                    || detail.startsWith("Data nilai final"));
+                    || detail.startsWith("Data nilai final") || detail.startsWith("Batas SKS."));
             boolean corrupt = cause instanceof org.sqlite.SQLiteException sqlite
                     && (sqlite.getResultCode() == org.sqlite.SQLiteErrorCode.SQLITE_CORRUPT
                         || sqlite.getResultCode() == org.sqlite.SQLiteErrorCode.SQLITE_NOTADB);
@@ -1170,8 +1248,8 @@ public final class WhatIfApp extends Application {
         return result;
     }
 
-    private record Workspace(List<Course> courses, List<Scenario> scenarios, CourseStore.SemesterSelection terms,
-                             CourseStore.GradingData grading) {}
+    private record Workspace(List<Course> courses, Scenario.Catalog catalog, CourseStore.SemesterSelection terms,
+                             CourseStore.GradingData grading, DashboardProjection.Settings projectionSettings) {}
 
     private record ViewRow(UUID id, String name, String category, String maximum, String entered, String required,
                            String status, boolean excluded, boolean restorable) {}

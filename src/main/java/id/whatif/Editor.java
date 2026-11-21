@@ -33,7 +33,7 @@ import java.util.function.Supplier;
 final class Editor {
     private Editor() {}
 
-    static void course(Window owner, Course previous, List<Semester> semesters, UUID initialSemester,
+    static void course(Window owner, Course previous, List<Semester> semesters, List<Course> courses, UUID initialSemester,
                        Consumer<Boolean> invalid, Save<Course> save) {
         TextField name = text(previous == null ? "" : previous.name(), "Contoh: Pemrograman Berorientasi Objek");
         AcademicDetails current = previous == null ? AcademicDetails.EMPTY : previous.academic();
@@ -62,7 +62,9 @@ final class Editor {
         Supplier<AcademicDetails> readAcademic = () -> {
             Semester selected = semester.getValue();
             if (previous == null && selected == null) throw new IllegalArgumentException("Pilih semester untuk mata kuliah baru.");
-            return AcademicDetails.read(selected == null ? null : selected.id(), sks.getText(), present.getText(), meetings.getText());
+            var draft = AcademicDetails.read(selected == null ? null : selected.id(), sks.getText(), present.getText(), meetings.getText());
+            SemesterSks.validate(selected, courses, previous, draft);
+            return draft;
         };
         if (previous != null) {
             content.getChildren().add(note(Aggregation.EXAMPLE, "muted"));

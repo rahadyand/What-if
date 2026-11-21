@@ -174,3 +174,25 @@ What If baru memakai target dari skala aktif. Skenario lama tetap menampilkan ni
 - [Tinjau ulang dari jendela 960 × 650](screenshots/46-tinjau-final-960x650.png)
 - [Dashboard 960 × 650 setelah pembaruan](screenshots/47-ip-ipk-960x650.png)
 - [Pengaturan skala nilai](screenshots/48-pengaturan-skala.png)
+
+## Tahap 3 — Proyeksi Dashboard dan batas 24 SKS
+
+`clean verify` dengan Java 21 lulus dengan 50 tes di Linux. Basis data terisolasi memverifikasi migrasi skema 3 ke 4 dengan semester lama berisi 27 SKS. Kehadiran, penilaian, nilai final, serta byte snapshot tetap utuh. Tes mencakup pemilihan lintas mata kuliah yang ditolak, snapshot rusak atau terhapus, skenario lama atau di luar batas normal, nilai final yang diutamakan, dan pemisahan pilihan tinjauan aktual serta proyeksi.
+
+| Indikator | Kontribusi yang dipakai | Tampilan |
+| --- | --- | --- |
+| IP dari nilai final sejauh ini | 21,00 ÷ 6 SKS | **3,50 · 6 dari 12 SKS** |
+| IPK Aktual | (29,10 + 21,00) ÷ 14 SKS | **3,58** |
+| IP Semester Proyeksi | (21,00 + 9,90 + 12,00) ÷ 12 SKS | **3,58** |
+| IPK Proyeksi | (29,10 + 42,90) ÷ 20 SKS | **3,60** |
+
+JavaFX diperiksa pada 1366 × 768 dan 960 × 650 dengan basis data demo. Skenario dengan target 75% dan skor efektif 86% tampil sebagai A. Mengganti skenario B+ menjadi A− mengubah proyeksi menjadi 3,68 dan 3,66. IP dan IPK Aktual tetap 3,50 dan 3,58. Skenario hanya terhitung setelah dipilih. Pilihan dapat dikosongkan, dipulihkan setelah restart, dan ditangani ketika skenario dihapus. Penyegaran eksplisit skenario lama memperbarui proyeksi setelah disimpan. Mata kuliah di luar cakupan dan sumber final terlihat dalam rincian. Tinjauan pengulangan proyeksi tidak mengubah keputusan aktual.
+
+Form penambahan, pengaturan SKS, dan pemindahan menerima hasil akhir 24 serta menolak 25. Tes penyimpanan memeriksa aturan yang sama, termasuk penurunan semester lama dari 27 ke 26, penolakan kenaikan kembali, dan penyimpanan perubahan nama pada semester yang melampaui batas.
+
+- [Dashboard dengan IP dan IPK aktual maupun proyeksi](screenshots/49-dashboard-proyeksi.png)
+- [Kontribusi dan mata kuliah belum final di luar cakupan](screenshots/50-rincian-proyeksi-ipk.png)
+- [Dashboard pada 960 × 650](screenshots/51-dashboard-proyeksi-960x650.png)
+- [Penolakan 25 SKS dan input yang bisa dikoreksi](screenshots/52-validasi-25-sks.png)
+- [Semester dengan 24/24 SKS](screenshots/53-semester-24-sks.png)
+- [Status skenario per mata kuliah](screenshots/54-pilihan-skenario-per-mata-kuliah.png)

@@ -1,6 +1,8 @@
 package id.whatif;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -30,6 +32,8 @@ record Scenario(UUID id, String name, Simulation.State state) {
     boolean stale(Course actual, GradeScale scale) {
         return !state.baseline().sameGradeInputs(actual) || !state.scale().equals(scale);
     }
+
+    record Catalog(List<Scenario> scenarios, Map<UUID, String> invalid) {}
 
     @Override public String toString() { return name; }
 }

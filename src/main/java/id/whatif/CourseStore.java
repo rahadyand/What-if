@@ -24,7 +24,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 final class CourseStore {
-    private static final int SCHEMA_VERSION = 3;
+    private static final int SCHEMA_VERSION = 4;
     private static final String COURSE_COLUMNS = "id, name, method, legacy_weights, semester_id, sks, present, meetings";
     private final Path database;
 
@@ -62,6 +62,7 @@ final class CourseStore {
                 if (version == 0) migrateWeights(connection);
                 if (version < 2) migrateAcademic(connection);
                 if (version < 3) migrateGrading(connection);
+                if (version < 4) migrateProjection(connection);
                 validateSchema(connection, SCHEMA_VERSION);
                 if (version < SCHEMA_VERSION) {
                     readCourses(connection);
@@ -178,6 +179,24 @@ final class CourseStore {
         }
     }
 
+    private static void migrateProjection(Connection connection) throws SQLException {
+        validateSchema(connection, 3);
+        try (var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    CREATE TABLE dashboard_scenarios (
+                        course_id TEXT PRIMARY KEY REFERENCES courses ON DELETE CASCADE, scenario_id TEXT NOT NULL
+                    )
+                    """);
+            statement.executeUpdate("""
+                    CREATE TABLE projected_repeat_reviews (
+                        course_id TEXT NOT NULL REFERENCES courses ON DELETE CASCADE,
+                        group_key TEXT NOT NULL, included INTEGER NOT NULL CHECK (included IN (0,1)),
+                        PRIMARY KEY(course_id, group_key)
+                    )
+                    """);
+        }
+    }
+
     private static void validateSchema(Connection connection, int version) throws SQLException {
         try (var statement = connection.createStatement()) {
             String courseColumns = switch (version) {
@@ -201,6 +220,10 @@ final class CourseStore {
                 statement.executeQuery("SELECT letter, boundary, points FROM grade_scale_rows LIMIT 0").close();
                 statement.executeQuery("SELECT course_id, letter, points, source, kept_candidate FROM confirmed_grades LIMIT 0").close();
                 statement.executeQuery("SELECT course_id, group_key, included FROM ipk_repeat_reviews LIMIT 0").close();
+            }
+            if (version >= 4) {
+                statement.executeQuery("SELECT course_id, scenario_id FROM dashboard_scenarios LIMIT 0").close();
+                statement.executeQuery("SELECT course_id, group_key, included FROM projected_repeat_reviews LIMIT 0").close();
             }
             try (var violations = statement.executeQuery("PRAGMA foreign_key_check")) {
                 if (violations.next()) throw new SQLException("Relasi basis data tidak sah. Berkas asli dipertahankan.");
@@ -332,6 +355,91 @@ final class CourseStore {
         });
     }
 
+    DashboardProjection.Settings loadProjectionSettings() throws SQLException {
+        return transact(CourseStore::readProjectionSettings);
+    }
+
+    private static DashboardProjection.Settings readProjectionSettings(Connection connection) throws SQLException {
+        try (var statement = connection.createStatement()) {
+            var selections = new HashMap<UUID, UUID>();
+            try (var rows = statement.executeQuery("SELECT course_id, scenario_id FROM dashboard_scenarios")) {
+                while (rows.next()) selections.put(readId(rows.getString(1)), readId(rows.getString(2)));
+            }
+            var reviews = new HashMap<AcademicAverage.ProjectedRepeatKey, Boolean>();
+            try (var rows = statement.executeQuery("SELECT course_id, group_key, included FROM projected_repeat_reviews")) {
+                while (rows.next()) reviews.put(new AcademicAverage.ProjectedRepeatKey(rows.getString(2), readId(rows.getString(1))),
+                        rows.getBoolean(3));
+            }
+            return new DashboardProjection.Settings(Map.copyOf(selections), Map.copyOf(reviews));
+        }
+    }
+
+    void saveProjectionChoice(UUID course, UUID expected, UUID selected) throws SQLException {
+        transaction(connection -> {
+            var current = readProjectionSettings(connection).selections().get(course);
+            if (!Objects.equals(current, expected)) {
+                throw new SQLException("Data telah berubah di jendela lain. Buka ulang untuk memuat pilihan skenario.");
+            }
+            if (selected == null) {
+                deleteById(connection, "DELETE FROM dashboard_scenarios WHERE course_id=?", course);
+                return;
+            }
+            try (var statement = connection.prepareStatement("""
+                    SELECT 1 FROM scenarios
+                    WHERE id=? AND course_id=? AND NOT EXISTS (SELECT 1 FROM confirmed_grades WHERE course_id=?)
+                    """)) {
+                statement.setString(1, selected.toString());
+                statement.setString(2, course.toString());
+                statement.setString(3, course.toString());
+                try (var row = statement.executeQuery()) {
+                    if (!row.next()) throw new SQLException("Data skenario tidak tersedia untuk mata kuliah yang belum final.");
+                }
+            }
+            try (var write = connection.prepareStatement("""
+                    INSERT INTO dashboard_scenarios(course_id, scenario_id) VALUES (?,?)
+                    ON CONFLICT(course_id) DO UPDATE SET scenario_id=excluded.scenario_id
+                    """)) {
+                write.setString(1, course.toString());
+                write.setString(2, selected.toString());
+                write.executeUpdate();
+            }
+        });
+    }
+
+    Map<AcademicAverage.ProjectedRepeatKey, Boolean> saveProjectedRepeatReview(UUID semester, AcademicAverage.RepeatGroup group,
+            Map<AcademicAverage.ProjectedRepeatKey, Boolean> expected, Set<UUID> included) throws SQLException {
+        return transact(connection -> {
+            var data = readGrading(connection);
+            var settings = readProjectionSettings(connection);
+            var report = DashboardProjection.evaluate(semester, readCourses(connection), data.finals(), data.scale(),
+                    readScenarioCatalog(connection), settings, data.repeats());
+            var current = report.cumulative().repeats().stream().filter(item -> item.key().equals(group.key()) && item.projected())
+                    .findFirst().orElse(null);
+            if (!Objects.equals(group, current) || group.courses().stream()
+                    .map(entry -> new AcademicAverage.ProjectedRepeatKey(group.key(), entry.course().id()))
+                    .anyMatch(key -> !Objects.equals(expected.get(key), settings.reviews().get(key)))) {
+                throw new SQLException("Data telah berubah di jendela lain. Buka ulang untuk meninjau proyeksi.");
+            }
+            var updated = new HashMap<>(settings.reviews());
+            try (var write = connection.prepareStatement("""
+                    INSERT INTO projected_repeat_reviews VALUES (?,?,?)
+                    ON CONFLICT(course_id, group_key) DO UPDATE SET included=excluded.included
+                    """)) {
+                for (var entry : group.courses()) {
+                    UUID id = entry.course().id();
+                    boolean use = included.contains(id);
+                    write.setString(1, id.toString());
+                    write.setString(2, group.key());
+                    write.setBoolean(3, use);
+                    write.addBatch();
+                    updated.put(new AcademicAverage.ProjectedRepeatKey(group.key(), id), use);
+                }
+                write.executeBatch();
+            }
+            return Map.copyOf(updated);
+        });
+    }
+
     List<Course> load() throws SQLException {
         try (Connection connection = open()) {
             connection.setAutoCommit(false);
@@ -422,6 +530,7 @@ final class CourseStore {
         }
         transaction(connection -> {
             verifyCurrent(connection, course.id(), expected);
+            validateSks(connection, expected, course.academic());
             try (var statement = connection.prepareStatement("""
                     INSERT INTO courses(id, name, method, legacy_weights, semester_id, sks, present, meetings)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -463,6 +572,44 @@ final class CourseStore {
         });
     }
 
+    private static void validateSks(Connection connection, Course before, AcademicDetails proposed) throws SQLException {
+        if (proposed.semesterId() == null || proposed.sks() == null) return;
+        AcademicDetails previous = before == null ? null : before.academic();
+        if (previous != null && Objects.equals(previous.semesterId(), proposed.semesterId())
+                && Objects.equals(previous.sks(), proposed.sks())) return;
+        try (var query = connection.prepareStatement("""
+                SELECT id, label, academic_year,
+                    (SELECT COALESCE(SUM(sks),0) FROM courses WHERE semester_id=semesters.id) AS recorded
+                FROM semesters WHERE id=?
+                """)) {
+            query.setString(1, proposed.semesterId().toString());
+            try (var result = query.executeQuery()) {
+                if (!result.next()) throw new SQLException("Data semester tujuan tidak ditemukan.");
+                SemesterSks.validate(readSemester(result).name(), result.getLong("recorded"), previous, proposed);
+            }
+        } catch (IllegalArgumentException issue) {
+            throw new SQLException("Batas SKS. " + issue.getMessage(), issue);
+        }
+    }
+
+    Scenario.Catalog loadScenarioCatalog() throws SQLException { return transact(CourseStore::readScenarioCatalog); }
+
+    private static Scenario.Catalog readScenarioCatalog(Connection connection) throws SQLException {
+        List<Scenario> scenarios = new ArrayList<>();
+        var invalid = new HashMap<UUID, String>();
+        try (var statement = connection.createStatement();
+             var rows = statement.executeQuery("SELECT id, course_id, name, snapshot FROM scenarios ORDER BY rowid")) {
+            while (rows.next()) {
+                try { scenarios.add(readScenario(rows)); }
+                catch (InvalidScenario failure) {
+                    try { invalid.put(readId(rows.getString("id")), rows.getString("name")); }
+                    catch (IllegalArgumentException unusableId) { /* No valid selection can reference this ID. */ }
+                }
+            }
+        }
+        return new Scenario.Catalog(List.copyOf(scenarios), Map.copyOf(invalid));
+    }
+
     List<Scenario> loadScenarios() throws SQLException {
         try (Connection connection = open(); var statement = connection.createStatement();
              var result = statement.executeQuery("SELECT id, course_id, name, snapshot FROM scenarios ORDER BY rowid")) {
@@ -500,6 +647,21 @@ final class CourseStore {
         });
     }
 
+    void deleteScenario(Scenario expected) throws SQLException {
+        transaction(connection -> {
+            try (var lookup = connection.prepareStatement("SELECT id, course_id, name, snapshot FROM scenarios WHERE id=?")) {
+                lookup.setString(1, expected.id().toString());
+                try (var row = lookup.executeQuery()) {
+                    if (!row.next() || !expected.equals(readScenario(row))) {
+                        throw new SQLException("Data telah berubah di jendela lain. Buka ulang untuk memuat skenario.");
+                    }
+                }
+            }
+            // The dashboard retains the selected ID so the user can see which selection needs replacement.
+            deleteById(connection, "DELETE FROM scenarios WHERE id=?", expected.id());
+        });
+    }
+
     private static Scenario readScenario(ResultSet result) throws SQLException {
         try {
             var data = ScenarioSnapshot.read(result.getBytes("snapshot"));
@@ -509,7 +671,13 @@ final class CourseStore {
             }
             return scenario;
         } catch (IOException | IllegalArgumentException failure) {
-            throw new SQLException("Data skenario rusak atau versinya tidak didukung. Berkas asli dipertahankan.", failure);
+            throw new InvalidScenario(failure);
+        }
+    }
+
+    private static final class InvalidScenario extends SQLException {
+        InvalidScenario(Throwable cause) {
+            super("Data skenario rusak atau versinya tidak didukung. Berkas asli dipertahankan.", cause);
         }
     }
 

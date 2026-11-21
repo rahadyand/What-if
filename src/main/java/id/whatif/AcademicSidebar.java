@@ -72,6 +72,7 @@ final class AcademicSidebar extends VBox {
         String title = semester == null ? AcademicDetails.UNGROUPED : semester.name();
         boolean isActive = id != null && id.equals(active);
         Button open = navButton(title, () -> viewSemester.accept(id));
+        open.getStyleClass().add("semester-nav-label");
         open.setId("semester-" + groupId);
         open.setTooltip(new Tooltip(semester == null ? title : semester.toString()));
         open.setAccessibleText(title + (isActive ? ", aktif" : ""));

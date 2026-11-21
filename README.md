@@ -30,6 +30,10 @@ Aplikasi terbuka di **Dashboard**. Tambah semester, pilih semester untuk melihat
 
 Di **Nilai Aktual**, gunakan **Tetapkan Nilai Final** untuk mengonfirmasi hasil lengkap atau memasukkan hasil resmi kampus. Dashboard menghitung IP dan IPK dari angka mutu final yang tersimpan. **Pengaturan Skala Nilai** di Dashboard mengubah skala untuk perhitungan aktual dan What If baru. Tinjau perubahan kandidat melalui **Tinjau Ulang Nilai Final**.
 
+## Proyeksi Dashboard dan batas SKS
+
+Simpan skenario di What If, lalu gunakan **Pilih skenario** di Dashboard pada mata kuliah yang belum final. Kartu proyeksi memakai pilihan pada semester yang dilihat. **Rincian Proyeksi** menampilkan sumber, kontribusi, dan cakupan. **Total SKS tercatat** menampilkan pemakaian dari batas 24 SKS per semester.
+
 ## Alur tinjau
 
 1. Saat menambah mata kuliah, centang pilihan **UTS**, **UAS**, **Tugas**, **Projek**, dan **Praktikum** yang tercantum di RPS, lalu isi bobotnya. Gunakan **+ Kategori kustom** untuk kategori lain. Simpan saat total kategori aktif tepat 100%. **Kelola kategori** membuka kembali draf bobot. **Pengaturan** mengubah cara menghitung hasil di dalam kategori.
@@ -45,12 +49,13 @@ Untuk data lama, tutup aplikasi dan cadangkan berkas SQLite beserta berkas penda
 
 - [Fondasi Akademik, peta OOP, dan keputusan Tahap 2](docs/tahap-akademik.md)
 - [Nilai final, IP, IPK, dan peta OOP](docs/nilai-final-dan-indeks.md)
+- [Proyeksi Dashboard dan batas 24 SKS](docs/proyeksi-dashboard.md)
 - [Perubahan What If](docs/perubahan-what-if.md)
 - [Kebijakan perhitungan dan peta OOP](docs/desain.md)
 - [Hasil verifikasi dan tangkapan layar](docs/verifikasi.md)
 - [Atribusi dan lisensi](docs/atribusi.md)
 - [Build dan peninjauan app-image Windows](docs/kemas-windows.md)
 
-## Di luar cakupan Tahap 2
+## Di luar cakupan Tahap 3
 
-Akun, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, tanggal, catatan, pembulatan alternatif, Pass/Fail, aturan penilaian berdasarkan kehadiran,  ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, proyeksi Dashboard, rekomendasi target IP, serta installer dan publikasi GitHub Release.
+Akun, agenda, jadwal, modul, layanan daring, AI, sinkronisasi, tanggal, catatan, pembulatan alternatif, Pass/Fail, aturan penilaian berdasarkan kehadiran,  ekstra kredit dengan maksimum nol, bobot nol, kode mata kuliah, rekomendasi target IP/IPK, serta installer dan publikasi GitHub Release.

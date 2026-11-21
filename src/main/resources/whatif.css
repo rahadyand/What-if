@@ -258,3 +258,13 @@
     -fx-border-radius: 7;
 }
 .index-unavailable { -fx-font-size: 19px; -fx-font-weight: bold; }
+
+.dashboard-total { -fx-font-size: 23px; -fx-font-weight: bold; }
+.index-metric { -fx-font-size: 27px; -fx-font-weight: bold; }
+.summary.index-card { -fx-padding: 9 14; }
+.academic-nav.semester-nav-label { -fx-font-size: 13px; -fx-padding: 5 4; }
+.projection-tabs > .tab-header-area > .tab-header-background { -fx-background-color: -what-side; }
+.projection-tabs .tab { -fx-background-color: white; -fx-border-color: -what-line; -fx-background-insets: 0; }
+.projection-tabs .tab:selected { -fx-background-color: -what-soft; }
+.projection-details-scroll, .projection-details-scroll > .viewport { -fx-background-color: white; }
+.projection-details-scroll > .viewport > .vbox { -fx-padding: 10 6; }

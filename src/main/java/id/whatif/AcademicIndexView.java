@@ -35,7 +35,7 @@ final class AcademicIndexView {
         if (result.sks() == 0 && semester.recordedSks() == 0 && semester.missingSks() == 0) coverage = "";
         String next = viewed == null ? "Pilih atau isi semester mata kuliah."
                 : semester.missingSks() > 0 ? "Lengkapi SKS di Pengaturan."
-                : semester.missingFinal() > 0 ? "Tetapkan nilai final di Nilai Aktual."
+                : semester.missingFinal() > 0 && result.sks() == 0 ? "Tetapkan nilai final di Nilai Aktual."
                 : result.sks() == 0 ? "Tambahkan mata kuliah semester ini." : "";
         VBox term = card(title, result, coverage, next);
         term.setId("semester-ip");
@@ -45,7 +45,7 @@ final class AcademicIndexView {
         String guidance = review ? "Tinjau mata kuliah yang mungkin diulang."
                 : missing.semester() > 0 ? "Lengkapi semester mata kuliah."
                 : missing.sks() > 0 ? "Lengkapi SKS di Pengaturan."
-                : missing.finalGrade() > 0 ? "Tetapkan nilai final di Nilai Aktual."
+                : missing.finalGrade() > 0 && cumulative.result().sks() == 0 ? "Tetapkan nilai final di Nilai Aktual."
                 : cumulative.result().sks() == 0 ? (cumulative.repeats().isEmpty()
                     ? "Tambahkan semester dan mata kuliah untuk mulai." : "Buka rincian untuk menyesuaikan kontribusi.") : "";
         VBox global = card("IPK Aktual", cumulative.result(), cumulative.result().sks() + " SKS masuk", guidance);
@@ -58,10 +58,10 @@ final class AcademicIndexView {
 
     private static VBox card(String title, AcademicAverage.Result result, String coverage, String next) {
         VBox card = new VBox(3, Editor.note(title, "field-label"),
-                Editor.note(result.display(), result.sks() == 0 ? "index-unavailable" : "metric"));
+                Editor.note(result.display(), result.sks() == 0 ? "index-unavailable" : "index-metric"));
         if (!coverage.isEmpty()) card.getChildren().add(Editor.note(coverage, "muted"));
         if (!next.isEmpty()) card.getChildren().add(Editor.note(next, "muted"));
-        card.getStyleClass().add("summary");
+        card.getStyleClass().addAll("summary", "index-card");
         card.setMinWidth(0);
         card.setPrefWidth(200);
         HBox.setHgrow(card, Priority.ALWAYS);
@@ -87,8 +87,9 @@ final class AcademicIndexView {
             grid.addRow(0, header("Mata kuliah"), header("Huruf"), header("Mutu"), header("SKS"), header("Kontribusi"));
             int index = 1;
             for (var entry : result.courses()) {
-                grid.addRow(index++, Editor.note(entry.course().name() + "\n" + semesterName.apply(entry.course().academic().semesterId()), "muted"),
-                        Editor.note(entry.grade().letter(), "muted"), Editor.note(entry.grade().pointText(), "muted"),
+                grid.addRow(index++, Editor.note(entry.course().name() + "\n" + semesterName.apply(entry.course().academic().semesterId())
+                                + "\n" + entry.source(), "muted"),
+                        Editor.note(entry.letter(), "muted"), Editor.note(entry.pointText(), "muted"),
                         Editor.note(Integer.toString(entry.sks()), "muted"), Editor.note(Numbers.display(entry.weighted()), "muted"));
             }
             content.getChildren().add(grid);
@@ -116,17 +117,17 @@ final class AcademicIndexView {
 
     private static javafx.scene.control.Label header(String text) { return Editor.note(text, "field-label"); }
 
-    static void review(Window owner, AcademicAverage.RepeatGroup group, Map<UUID, AcademicAverage.RepeatDecision> decisions,
+    static void review(Window owner, AcademicAverage.RepeatGroup group, Function<UUID, Boolean> included,
                        Function<UUID, String> semesterName, Editor.Save<Set<UUID>> save) {
-        VBox fields = new VBox(8, Editor.note("Centang kontribusi yang akan dimasukkan ke IPK. "
+        VBox fields = new VBox(8, Editor.note("Centang kontribusi yang akan dimasukkan ke " + (group.projected() ? "IPK Proyeksi. " : "IPK Aktual. ")
                 + "Gunakan daftar ini untuk meninjau kemungkinan mata kuliah berulang.", "muted"));
         var choices = new LinkedHashMap<UUID, CheckBox>();
         for (var entry : group.courses()) {
             Course course = entry.course();
             CheckBox box = new CheckBox(semesterName.apply(course.academic().semesterId()) + " · "
-                    + entry.grade().letter() + " · " + entry.sks() + " SKS");
+                    + entry.letter() + " · " + entry.sks() + " SKS");
             box.setWrapText(true);
-            box.setSelected(group.reviewed() && decisions.get(course.id()).included());
+            box.setSelected(group.reviewed() && Boolean.TRUE.equals(included.apply(course.id())));
             choices.put(course.id(), box);
             fields.getChildren().add(box);
         }
