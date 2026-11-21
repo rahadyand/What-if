@@ -31,6 +31,11 @@ final class AcademicAverage {
 
     static Selection reviewRepeats(List<Contribution> candidates, Map<UUID, RepeatDecision> actual,
                                    Map<ProjectedRepeatKey, Boolean> projected) {
+        return reviewRepeats(candidates, actual, projected, Map.of());
+    }
+
+    static Selection reviewRepeats(List<Contribution> candidates, Map<UUID, RepeatDecision> actual,
+                                   Map<ProjectedRepeatKey, Boolean> projected, Map<ProjectedRepeatKey, Boolean> session) {
         var groups = new LinkedHashMap<String, List<Contribution>>();
         for (var entry : candidates) {
             String name = entry.course().name().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
@@ -49,8 +54,10 @@ final class AcademicAverage {
             for (var entry : group) {
                 UUID id = entry.course().id();
                 RepeatDecision decision = actual.get(id);
-                Boolean include = hasProjection ? projected.get(new ProjectedRepeatKey(key, id))
+                var member = new ProjectedRepeatKey(key, id);
+                Boolean include = hasProjection ? projected.get(member)
                         : decision != null && decision.groupKey().equals(key) ? Boolean.valueOf(decision.included()) : null;
+                if (session.containsKey(member)) include = session.get(member);
                 if (include != null) choices.put(id, include);
             }
             boolean reviewed = group.size() == choices.size();
@@ -91,6 +98,10 @@ final class AcademicAverage {
     }
 
     record Result(List<Contribution> courses, long sks, BigDecimal weighted) {
+        Exact exact() {
+            return sks == 0 ? null : Exact.of(weighted).divide(Exact.of(BigDecimal.valueOf(sks)));
+        }
+
         String display() {
             return sks == 0 ? "Belum tersedia" : weighted.divide(BigDecimal.valueOf(sks), 2, RoundingMode.HALF_UP)
                     .toPlainString().replace('.', ',');

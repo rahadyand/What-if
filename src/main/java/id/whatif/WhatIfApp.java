@@ -210,12 +210,48 @@ public final class WhatIfApp extends Application {
             indices.getChildren().add(ProjectionView.cards(report, viewed.toString(), () ->
                     ProjectionView.details(stage, viewed, report, this::semesterName, group -> reviewRepeat(viewed.id(), group))));
         }
+        if (viewed != null) {
+            Button planner = button("Rencanakan Target IP/IPK", () -> showIndexPlanner(viewed, report));
+            planner.getStyleClass().add("scenario-save");
+            indices.getChildren().addFirst(new HBox(planner));
+        }
         var dashboard = new AcademicDashboard(viewed, viewed != null && viewed.id().equals(activeSemester), grouped, indices, report,
                 this::editScale, () -> editSemester(null), () -> editSemester(viewed), () -> activateSemester(viewed),
                 () -> editCourse(null, viewedSemester), this::openCourse,
                 selected -> chooseProjection(selected, report.rows().get(selected.id())), this::reviewDashboardScenario);
         root.setCenter(verticalScroll(dashboard, "dashboard-scroll"));
         updateSidebar();
+    }
+
+    private void showIndexPlanner(Semester viewed, DashboardProjection.Report report) {
+        var inputs = new TargetPlanner.Inputs(viewed.id(), List.copyOf(courses), Map.copyOf(finals), activeScale,
+                report.rows(), report.outside(), repeatDecisions, projectionSettings.reviews());
+        new IndexPlannerView(stage, inputs, this::semesterName, row -> resolvePlannerIssue(row, report), this::openPlanningDraft).show();
+    }
+
+    private void resolvePlannerIssue(TargetPlanner.CoursePlan row, DashboardProjection.Report report) {
+        Course selected = row.course();
+        if (selected.academic().sks() == null) {
+            openCourse(selected, false);
+            if (course == selected && simulation == null) editCourse(selected, viewedSemester);
+        } else if (row.choice() != null && row.choice().choice() != null && !row.choice().usable()) {
+            if (row.choice().snapshot() != null) reviewDashboardScenario(selected, row.choice().snapshot());
+            else chooseProjection(selected, report.rows().get(selected.id()));
+        } else {
+            openCourse(selected, false);
+        }
+    }
+
+    private void openPlanningDraft(TargetPlanner.CoursePlan row, TargetPlanner.Outcome outcome) {
+        if (!confirmTransition("Buka draf dari rencana")) return;
+        course = row.course();
+        viewedSemester = course.academic().semesterId();
+        simulation = row.draft(outcome);
+        openedScenario = null;
+        invalidDraft = false;
+        updateSidebar();
+        showCourse(null);
+        targetField.requestFocus();
     }
 
     private void chooseProjection(Course selected, DashboardProjection.Row row) {

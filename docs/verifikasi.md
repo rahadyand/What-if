@@ -196,3 +196,23 @@ Form penambahan, pengaturan SKS, dan pemindahan menerima hasil akhir 24 serta me
 - [Penolakan 25 SKS dan input yang bisa dikoreksi](screenshots/52-validasi-25-sks.png)
 - [Semester dengan 24/24 SKS](screenshots/53-semester-24-sks.png)
 - [Status skenario per mata kuliah](screenshots/54-pilihan-skenario-per-mata-kuliah.png)
+
+## Tahap 4 — Rencana Target IP dan IPK
+
+`clean verify` dengan Java 21 lulus dengan 55 tes di Linux. Fixture memakai 29,10 kontribusi berbobot dari 8 SKS sebelumnya, serta empat mata kuliah semester yang dilihat masing-masing 3 SKS. Nilai final A dan B menyumbang 21,00 di semester tersebut.
+
+| Uji | Hasil |
+| --- | --- |
+| Target IP 3,50 | **Bisa Dicapai**. Saran B dan A pada dua mata kuliah tersisa memberi 42,00 ÷ 12 = **3,50**. |
+| Target IP 3,76 | **Tidak Dapat Dicapai**. Batas 45,00 ÷ 12 = **3,75**. Kurang **0,01 poin IP**. |
+| Target IPK 3,71 | **Tidak Dapat Dicapai**. Batas eksak 74,10 ÷ 20 = **3,705**, ditampilkan sebagai **3,71**. Kurang **0,005 poin IPK**. |
+| Satu mata kuliah dibatasi hasil normal 78% | Huruf B+ menyumbang 9,90 untuk 3 SKS. Batas IP menjadi **42,90 ÷ 12**. |
+| Skala kustom dengan nilai huruf dan angka mutu berurutan berbeda | Planner memilih opsi yang mencapai 5,00 angka mutu pada 70%, sekaligus mengevaluasi hasil saat penilaian bebas mendapat maksimum. |
+
+JavaFX diperiksa pada 1366 × 768 dan 960 × 650 dengan basis data demo. Pengujian membuka kedua mode, memasukkan koma dan titik, mengoreksi input di atas batas skala, memeriksa **Sudah Memenuhi** setelah sumber awal lengkap, dan menyelesaikan hambatan SKS, skenario lama, serta pengulangan. Rekomendasi dibuka di What If sebagai draf baru. Batal keluar menjaga draf dan membuang draf mengembalikan pengguna ke Dashboard. Perbandingan sebelum dan sesudah memastikan mata kuliah, nilai final, skenario, serta pilihan Dashboard tetap sama ketika hanya merencanakan. Pilihan pengulangan dan pengganti sumber dalam dialog juga tidak tersimpan.
+
+- [Aksi planner pada Dashboard](screenshots/55-dashboard-aksi-planner.png)
+- [Target IP 3,50 dan batas 3,75](screenshots/56-target-ip-350.png)
+- [Rekomendasi B dan A](screenshots/57-kombinasi-ip-350.png)
+- [Batas IPK 3,705 pada jendela 960 × 650](screenshots/58-batas-ipk-3705.png)
+- [Tinjauan skenario lama dan pengganti sumber untuk sesi](screenshots/59-skenario-lama-planner.png)

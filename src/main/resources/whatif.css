@@ -268,3 +268,13 @@
 .projection-tabs .tab:selected { -fx-background-color: -what-soft; }
 .projection-details-scroll, .projection-details-scroll > .viewport { -fx-background-color: white; }
 .projection-details-scroll > .viewport > .vbox { -fx-padding: 10 6; }
+
+.index-planner-scroll, .index-planner-scroll > .viewport { -fx-background-color: white; }
+.index-planner-scroll > .viewport > .vbox { -fx-padding: 0 8 0 1; }
+.planner-course {
+    -fx-background-color: -what-side;
+    -fx-background-radius: 6;
+    -fx-border-color: -what-line;
+    -fx-border-radius: 6;
+    -fx-padding: 7 10;
+}

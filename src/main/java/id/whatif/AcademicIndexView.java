@@ -119,8 +119,14 @@ final class AcademicIndexView {
 
     static void review(Window owner, AcademicAverage.RepeatGroup group, Function<UUID, Boolean> included,
                        Function<UUID, String> semesterName, Editor.Save<Set<UUID>> save) {
+        review(owner, group, included, semesterName, false, save);
+    }
+
+    static void review(Window owner, AcademicAverage.RepeatGroup group, Function<UUID, Boolean> included,
+                       Function<UUID, String> semesterName, boolean sessionOnly, Editor.Save<Set<UUID>> save) {
+        String scope = sessionOnly ? "Pilihan berlaku untuk sesi perencanaan ini. " : "";
         VBox fields = new VBox(8, Editor.note("Centang kontribusi yang akan dimasukkan ke " + (group.projected() ? "IPK Proyeksi. " : "IPK Aktual. ")
-                + "Gunakan daftar ini untuk meninjau kemungkinan mata kuliah berulang.", "muted"));
+                + scope + "Gunakan daftar ini untuk meninjau kemungkinan mata kuliah berulang.", "muted"));
         var choices = new LinkedHashMap<UUID, CheckBox>();
         for (var entry : group.courses()) {
             Course course = entry.course();
