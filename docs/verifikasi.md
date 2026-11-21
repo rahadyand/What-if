@@ -70,3 +70,11 @@ Probe antarmuka JavaFX berjalan pada desktop virtual Linux dalam ukuran 1366 × 
 | Skenario tersimpan | [16-skenario-tersimpan.png](screenshots/16-skenario-tersimpan.png) |
 | Perbandingan skenario | [17-bandingkan.png](screenshots/17-bandingkan.png) |
 | Data dasar lama pada 960 × 650 | [18-data-dasar-lama-960x650.png](screenshots/18-data-dasar-lama-960x650.png) |
+
+## Preset kategori dan saran penilaian
+
+`./mvnw clean verify` lulus dengan 29 tes. Tes tambahan mencakup bobot aktif tepat 100%, kategori kustom, penolakan bobot kosong atau nonpositif, selisih pada 99,99% dan 100,01%, kecocokan kata/frasa utuh, alias Projek/Project, serta nama ambigu dan kategori nonaktif. Tes SQLite memeriksa penilaian bernama UTS yang disimpan dengan UUID UAS, perlindungan kategori yang masih digunakan, data mata kuliah lama, dan hasil skenario tersimpan ketika bobot aktual berubah.
+
+Probe JavaFX memakai basis data sementara di desktop virtual Linux. Pada 1366 × 768, probe menambahkan mata kuliah dengan tiga preset aktif dan satu kategori kustom, melihat kekurangan dan kelebihan bobot, lalu menyimpan pada 100%. Editor menyarankan UTS, membiarkan pilihan kosong untuk nama ambigu, nama tanpa kecocokan, atau kecocokan dengan kategori nonaktif, dan menampilkan pesan ketika pengguna memilih UAS. Skor 80/100 pada kategori UAS berbobot 30% menyumbang 24 poin persentase di Nilai Aktual. What If juga menghitung batas 24% pada konfigurasi yang sama. Probe memeriksa saran penilaian hipotetis, penjelasan metode rata-rata persentase, pilihan manual saat nama diubah, pemblokiran penonaktifan, dan data saat aplikasi dibuka lagi pada 960 × 650. Pengujian Windows native dan DPI Windows belum dilakukan untuk perubahan ini.
+
+[Editor preset dan total bobot](screenshots/19-preset-kategori.png) · [Editor penilaian dengan pilihan manual](screenshots/20-saran-kategori-konflik.png)

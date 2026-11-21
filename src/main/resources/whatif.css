@@ -172,3 +172,24 @@
 .dialog-pane .header-panel .label { -fx-font-size: 18px; -fx-font-weight: bold; }
 .dialog-pane > .content { -fx-padding: 16; }
 .dialog-pane > .button-bar > .container { -fx-padding: 0 16 14 16; }
+
+
+.category-edit-rows .text-field, .category-edit-rows .button {
+    -fx-padding: 3 9;
+}
+.category-toggle > .box {
+    -fx-background-color: white;
+    -fx-background-radius: 4;
+    -fx-border-color: -what-line;
+    -fx-border-radius: 4;
+}
+.category-toggle:selected > .box {
+    -fx-background-color: -what-soft;
+    -fx-border-color: -what-accent;
+}
+.category-toggle:selected > .box > .mark {
+    -fx-background-color: -what-accent;
+}
+.category-toggle:focused > .box, .category-toggle:hover > .box {
+    -fx-border-color: -what-accent;
+}

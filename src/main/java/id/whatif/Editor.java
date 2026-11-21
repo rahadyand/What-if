@@ -11,12 +11,18 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -28,26 +34,36 @@ final class Editor {
         TextField name = text(previous == null ? "" : previous.name(), "Contoh: Pemrograman Berorientasi Objek");
         ComboBox<Aggregation> method = new ComboBox<>();
         method.getItems().setAll(Aggregation.values());
+        method.setTooltip(new Tooltip(Aggregation.EXAMPLE));
         method.setValue(previous == null ? Aggregation.TOTAL_POINTS : previous.method());
-        VBox content = new VBox(12, field("Nama mata kuliah", name), field("Metode per kategori", method),
-                note(Aggregation.EXAMPLE, "muted"));
-        show(owner, previous == null ? "Tambah mata kuliah" : "Pengaturan mata kuliah", "Simpan", content,
-                () -> previous == null ? Course.create(name.getText(), method.getValue())
-                        : previous.withSettings(name.getText(), method.getValue()),
-                save, invalid, name, name.textProperty(), method.valueProperty());
+        VBox content = new VBox(10, field("Nama mata kuliah", name), field("Metode per kategori", method));
+        if (previous != null) {
+            content.getChildren().add(note(Aggregation.EXAMPLE, "muted"));
+            show(owner, "Pengaturan mata kuliah", "Simpan", content,
+                    () -> previous.withSettings(name.getText(), method.getValue()), save, invalid, name,
+                    name.textProperty(), method.valueProperty());
+            return;
+        }
+
+        var categories = new CategoryEditor(null);
+        Label heading = note("Kategori dan bobot", "field-label");
+        content.getChildren().addAll(heading, categories.content());
+        show(owner, "Tambah mata kuliah", "Simpan", content, () -> {
+            var selected = categories.readCategories();
+            return Course.create(name.getText(), method.getValue(), selected);
+        }, save, invalid, name, name.textProperty(), method.valueProperty(), categories.changes());
     }
 
     static void assessment(Window owner, Course course, Assessment previous, Simulation.Row row,
-                           boolean simulation, Consumer<Boolean> invalid, Save<AssessmentInput> save) {
+                           List<Assessment> includedAssessments, boolean simulation,
+                           Consumer<Boolean> invalid, Save<AssessmentInput> save) {
         boolean hasActual = row != null && row.original() != null && row.original().earned() != null;
         TextField name = text(previous == null ? "" : previous.name(), "Contoh: Kuis 1");
-        ComboBox<Category> category = new ComboBox<>();
-        category.getItems().setAll(course.categories());
-        category.setValue(previous == null ? course.categories().getFirst()
-                : course.categories().stream().filter(c -> c.id().equals(previous.categoryId())).findFirst().orElseThrow());
+        UUID id = previous == null ? UUID.randomUUID() : previous.id();
+        CategoryChoice category = new CategoryChoice(course, previous, includedAssessments, id, name);
         TextField maximum = text(previous == null ? "100" : Numbers.display(previous.maximum()), "Contoh: 100");
         TextField earned = text(previous == null ? "" : Numbers.display(previous.earned()), "Contoh: 80,2");
-        VBox content = new VBox(12, field("Nama penilaian", name), field("Kategori", category),
+        VBox content = new VBox(12, field("Nama penilaian", name), category.fields(),
                 field("Nilai maksimum", maximum));
 
         ComboBox<ScoreType> type = new ComboBox<>();
@@ -66,7 +82,6 @@ final class Editor {
                     note("Kosong berarti belum dinilai. Isi 0 jika nilainya memang nol.", "muted"));
         }
 
-        UUID id = previous == null ? UUID.randomUUID() : previous.id();
         show(owner, previous == null ? (simulation ? "Tambah asumsi penilaian" : "Tambah penilaian")
                         : (simulation ? "Ubah simulasi penilaian" : "Ubah penilaian"),
                 simulation ? "Terapkan" : "Simpan", content, () -> {
@@ -77,11 +92,104 @@ final class Editor {
                                 case FREE -> null;
                                 case FIXED -> Numbers.read(earned.getText(), "Nilai asumsi", false, false);
                             };
-                    Assessment assessment = new Assessment(id, name.getText(), category.getValue().id(),
+                    Assessment assessment = new Assessment(id, name.getText(), category.selected().id(),
                             Numbers.read(maximum.getText(), "Nilai maksimum", false, true), points);
                     return new AssessmentInput(assessment, selected == ScoreType.FIXED);
-                }, save, invalid, name, name.textProperty(), category.valueProperty(), maximum.textProperty(),
+                }, save, invalid, name, name.textProperty(), category.selector.valueProperty(), maximum.textProperty(),
                 earned.textProperty(), type.valueProperty());
+    }
+
+    private static final class CategoryChoice {
+        private final ComboBox<Category> selector = new ComboBox<>();
+        private final Label guidance = note("", "muted");
+        private final Course course;
+        private final List<Assessment> included;
+        private final UUID assessmentId;
+        private final TextField name;
+        private boolean manual;
+        private boolean applyingSuggestion;
+
+        CategoryChoice(Course course, Assessment previous, List<Assessment> included, UUID assessmentId, TextField name) {
+            this.course = course;
+            this.included = included;
+            this.assessmentId = assessmentId;
+            this.name = name;
+            manual = previous != null;
+            selector.getItems().setAll(course.categories());
+            selector.setPromptText("Pilih kategori aktif");
+            if (previous != null) {
+                selector.setValue(course.categories().stream().filter(c -> c.id().equals(previous.categoryId()))
+                        .findFirst().orElseThrow());
+            }
+            selector.valueProperty().addListener((unused, oldCategory, newCategory) -> {
+                if (!applyingSuggestion && newCategory != null) manual = true;
+                showGuidance();
+            });
+            // Selecting the already-suggested item also counts as an explicit choice.
+            selector.setCellFactory(unused -> {
+                ListCell<Category> cell = new ListCell<>() {
+                    @Override protected void updateItem(Category item, boolean empty) {
+                        super.updateItem(item, empty);
+                        setText(empty || item == null ? null : item.name());
+                    }
+                };
+                cell.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+                    if (!cell.isEmpty()) manual = true;
+                });
+                return cell;
+            });
+            selector.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (selector.isShowing() && event.getCode() == KeyCode.ENTER && selector.getValue() != null) manual = true;
+            });
+            name.textProperty().addListener(unused -> nameChanged());
+            showGuidance();
+        }
+
+        VBox fields() {
+            VBox fields = field("Kategori", selector);
+            fields.getChildren().add(guidance);
+            return fields;
+        }
+
+        Category selected() {
+            Category selected = selector.getValue();
+            if (selected == null) throw new IllegalArgumentException("Pilih kategori aktif untuk penilaian ini.");
+            return selected;
+        }
+
+        private void nameChanged() {
+            if (!manual) {
+                List<Category> matches = matches();
+                applyingSuggestion = true;
+                selector.setValue(matches.size() == 1 ? matches.getFirst() : null);
+                applyingSuggestion = false;
+            }
+            showGuidance();
+        }
+
+        private List<Category> matches() { return CategorySuggestion.matches(name.getText(), course.categories()); }
+
+        private void showGuidance() {
+            List<Category> matches = matches();
+            Category current = selector.getValue();
+            if (current == null) {
+                guidance.setText(matches.size() > 1
+                        ? "Nama cocok dengan lebih dari satu kategori aktif. Pilih kategorinya."
+                        : "Pilih kategori aktif atau ketik nama yang cocok.");
+                return;
+            }
+            String weight = course.legacyWeights() ? "bobot relatif lama " + Numbers.display(current.weight())
+                    : "bobot kategori " + Numbers.display(current.weight()) + "%";
+            String selected = "Kategori " + current.name() + " (" + weight + ").";
+            if (matches.size() == 1 && !matches.getFirst().id().equals(current.id())) {
+                selected = "Nama penilaian cocok dengan " + matches.getFirst().name()
+                        + ". Jika disimpan, nilai ini dihitung dalam kategori " + current.name() + " (" + weight + ").";
+            }
+            if (included.stream().anyMatch(row -> !row.id().equals(assessmentId) && row.categoryId().equals(current.id()))) {
+                selected += "\nJika beberapa penilaian dihitung, kategori ini memakai " + course.method() + ".";
+            }
+            guidance.setText(selected);
+        }
     }
 
     static <T> void show(Window owner, String title, String action, VBox fields, Supplier<T> read,

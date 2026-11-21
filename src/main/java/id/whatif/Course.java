@@ -43,8 +43,11 @@ record Course(UUID id, String name, Aggregation method, List<Category> categorie
     }
 
     static Course create(String name, Aggregation method) {
-        return new Course(UUID.randomUUID(), name, method,
-                List.of(new Category(UUID.randomUUID(), "Umum", FULL_WEIGHT)), List.of());
+        return create(name, method, List.of(new Category(UUID.randomUUID(), "Umum", FULL_WEIGHT)));
+    }
+
+    static Course create(String name, Aggregation method, List<Category> categories) {
+        return new Course(UUID.randomUUID(), name, method, categories, List.of());
     }
 
     Course withSettings(String name, Aggregation method) {
@@ -57,6 +60,10 @@ record Course(UUID id, String name, Aggregation method, List<Category> categorie
 
     Course withAssessments(List<Assessment> assessments) {
         return new Course(id, name, method, categories, assessments, legacyWeights);
+    }
+
+    boolean categoryInUse(UUID categoryId) {
+        return assessments.stream().anyMatch(row -> row.categoryId().equals(categoryId));
     }
 
     String categoryName(UUID id) {

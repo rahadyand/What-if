@@ -8,6 +8,10 @@ Di Nilai Aktual, hanya penilaian dengan skor yang dihitung di dalam setiap kateg
 
 Dalam satu kategori, **Total poin** memakai jumlah skor dibagi jumlah maksimum. **Rata-rata persentase** menghitung rasio tiap penilaian lalu meratakannya. Untuk 8/10 dan 60/100, hasilnya masing-masing 68/110 (sekitar 61,82%) dan 70%. Setelah menghitung nilai kategori, sistem menerapkan persentase kategori terhadap nilai akhir. Total konfigurasi baru harus tepat 100% dan setiap kategori berbobot positif. Penilaian dengan maksimum sama tetap dapat memiliki kontribusi berbeda.
 
+Editor mata kuliah baru menawarkan lima preset tanpa bobot bawaan. Kategori kustom memakai editor yang sama. Hanya kategori aktif disimpan dan disertakan dalam total bobot. Mata kuliah lama tetap memakai kategori dan UUID yang tersimpan. Menonaktifkan kategori berisi penilaian memerlukan pemindahan penilaian secara eksplisit.
+
+Saran kategori mencocokkan kata atau frasa utuh tanpa membedakan kapitalisasi. `Projek`, `Project`, dan `Proyek` diperlakukan sebagai padanan. Kategori aktif yang cocok tunggal mengisi pilihan awal. Jika saran ambigu atau tidak ada, pengguna menentukan kategori. Pilihan yang sudah ditetapkan tetap berlaku saat nama berubah. Bobot yang tampil mengikuti kategori terpilih, dan kategori hipotetis memakai konfigurasi dari data dasar skenario.
+
 | Huruf | Batas bawah | Poin mata kuliah |
 | --- | ---: | ---: |
 | A | 85% | 4,00 |
@@ -51,7 +55,8 @@ Skenario memiliki UUID, nama, dan snapshot berversi berisi konfigurasi, penilaia
 | `Aggregation` | Abstraksi koefisien penilaian dengan dua implementasi enum | `shares` dipanggil dengan cara sama pada dua metode, tetapi total poin dan rata-rata persentase menerapkan perilaku berbeda. |
 | `Calculation`, `Exact`, `Grade`, `Numbers` | Evaluasi dan solver, aritmetika pecahan, klasifikasi huruf, dan parser desimal | Kedua hasil memakai evaluator yang sama. `84,5` ditentukan sebagai A- sebelum pemformatan. |
 | `CourseStore`, `Scenario`, `ScenarioSnapshot` | Migrasi SQLite, transaksi aktual/skenario, dan snapshot input | Penyimpanan skenario mempunyai UUID tersendiri dan memeriksa versi tersimpan sebelum pembaruan. |
-| `WeightConversion`, `CategoryEditor` | Usulan konversi dan validasi persentase satu draf | Usulan menampilkan selisih dan perubahan diterapkan dalam satu transaksi. |
+| `CategoryConfiguration`, `CategoryEditor`, `WeightConversion` | Preset, draf aktivasi, validasi persentase, dan tinjauan konversi | Hanya kategori aktif masuk total dan perubahan diterapkan dalam satu transaksi. |
+| `CategorySuggestion`, `Editor.CategoryChoice` | Pencocokan nama dan panduan pada editor | Saran tidak mengganti kategori yang dipilih eksplisit. `Calculation` membaca UUID kategori yang tersimpan. |
 | `WhatIfApp`, `Editor`, `ScenarioComparison` | Tampilan, interaksi, validasi formulir, dan koordinasi pekerjaan I/O | `Editor` menyimpan isian sampai operasi berhasil. `WhatIfApp` menjalankan I/O lewat JavaFX `Task`. |
 
 Koleksi generik menyimpan kategori, penilaian, dan saran menurut ID. Exception validasi menjaga objek tetap sah. Prepared statement dan try-with-resources mengelola I/O tanpa SQL di event handler.

@@ -745,14 +745,17 @@ public final class WhatIfApp extends Application {
         if (simulation == null) {
             Course expected = course;
             Assessment previous = expected.assessments().stream().filter(row -> row.id().equals(id)).findFirst().orElse(null);
-            Editor.assessment(stage, expected, previous, null, false, this::invalidDraft, (draft, success, failure) -> {
+            Editor.assessment(stage, expected, previous, null, expected.assessments(), false, this::invalidDraft, (draft, success, failure) -> {
                 Assessment value = draft.assessment();
                 Course next = expected.withAssessments(replace(expected.assessments(), row -> row.id().equals(id), value));
                 save(expected, next, value.id(), success, failure);
             });
         } else {
             Simulation.Row row = simulation.rows().stream().filter(item -> item.value().id().equals(id)).findFirst().orElse(null);
-            Editor.assessment(stage, simulation.baseline(), row == null ? null : row.value(), row, true, this::invalidDraft,
+            List<Assessment> included = simulation.rows().stream().filter(item -> !item.excluded())
+                    .map(Simulation.Row::value).toList();
+            Editor.assessment(stage, simulation.baseline(), row == null ? null : row.value(), row,
+                    included, true, this::invalidDraft,
                     (draft, success, failure) -> {
                         simulation.put(draft.assessment(), draft.assumption());
                         refreshResults(draft.assessment().id());
