@@ -1,5 +1,7 @@
 package id.whatif;
 
+import id.whatif.Course.Assessment;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
@@ -21,10 +23,17 @@ final class ResultText {
 
     static String percent(Exact value) { return value == null ? "—" : value(value) + "%"; }
 
-    static String requiredScore(BigDecimal required, BigDecimal maximum, BigDecimal excess) {
-        if (required == null) return "—";
-        return excess == null ? Numbers.display(required)
-                : Numbers.display(maximum) + " (+" + Numbers.display(excess) + " bonus)";
+    static ScoreRecommendation scoreRecommendation(Calculation.Projection projection, Assessment assessment) {
+        BigDecimal required = projection == null ? null : projection.suggestions().get(assessment.id());
+        if (required == null) return null;
+        BigDecimal maximum = assessment.maximum();
+        boolean capped = projection.status() == Calculation.Status.UNREACHABLE;
+        return new ScoreRecommendation(Numbers.display(capped ? maximum : required) + "/" + Numbers.display(maximum),
+                capped ? "Maksimum" : "Minimum");
+    }
+
+    record ScoreRecommendation(String fraction, String label) {
+        String display() { return fraction + " · " + label; }
     }
 
     static BigDecimal wholeScoreWithinMaximum(Exact commonPercent, BigDecimal maximum) {

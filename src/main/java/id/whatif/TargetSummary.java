@@ -63,7 +63,8 @@ final class TargetSummary extends VBox {
         if (!simulation.baseline().sameGradeInputs(current)) context = addContext(context, "Data dasar lama");
         if (simulation.baseline().legacyWeights()) context = addContext(context, "Bobot relatif lama");
 
-        String title = error.isBlank() ? targetTitle(simulation.target()) : "Target belum valid";
+        BigDecimal minimum = error.isBlank() ? simulation.target() : null;
+        String title = minimum == null ? "Target belum valid" : targetTitle(minimum);
         Label target = Editor.note(title, "target-highlight-heading");
         selected.getChildren().setAll(target);
         if (report == null || report.selected().status() == Calculation.Status.EMPTY) {
@@ -88,16 +89,8 @@ final class TargetSummary extends VBox {
             selected.getChildren().add(scoreOverview(projection, free));
         }
 
-        String gap = projection.status() == Calculation.Status.UNREACHABLE
-                ? "Target masih kurang " + ResultText.value(projection.shortfall()) + " poin persentase." : "";
-        if (!projection.excess().isEmpty()) {
-            var extras = free.stream().filter(row -> projection.excess().containsKey(row.id())).map(row ->
-                    row.name() + " perlu " + Numbers.display(projection.excess().get(row.id()))
-                            + " poin tambahan di atas maksimum normal " + Numbers.display(row.maximum())).toList();
-            selected.getChildren().add(Editor.note(String.join(". ", extras)
-                    + ". Poin tambahan bergantung pada izin dosen. " + gap, "validation"));
-        } else if (!gap.isEmpty()) {
-            selected.getChildren().add(Editor.note(gap, "validation"));
+        if (projection.status() == Calculation.Status.UNREACHABLE) {
+            selected.getChildren().add(Editor.note(shortfall(minimum, projection, free), "validation"));
         } else if (!free.isEmpty() && projection.status() == Calculation.Status.WITH_SUGGESTIONS) {
             String rounding = wholePointNote(projection, free);
             if (!rounding.isEmpty()) selected.getChildren().add(Editor.note(rounding, "muted"));
@@ -117,25 +110,30 @@ final class TargetSummary extends VBox {
 
     private static HBox scoreOverview(Calculation.Projection projection, List<Assessment> free) {
         VBox required = new VBox(2);
-        String maximumLabel = "Nilai akhir tertinggi jika semua penilaian tersisa mendapat skor maksimum";
+        boolean unreachable = projection.status() == Calculation.Status.UNREACHABLE;
         if (free.size() == 1) {
             Assessment assessment = free.getFirst();
-            required.getChildren().addAll(Editor.note(score(projection, assessment), "metric"),
-                    Editor.note(assessment.name(), "field-label"));
-            String maximum = Numbers.display(assessment.maximum());
-            maximumLabel = "Nilai akhir tertinggi jika " + assessment.name() + " mendapat " + maximum + "/" + maximum;
+            var score = ResultText.scoreRecommendation(projection, assessment);
+            required.getChildren().addAll(Editor.note(score.label() + " " + assessment.name(), "field-label"),
+                    Editor.note(score.fraction(), "metric"));
         } else {
-            required.getChildren().add(Editor.note("Saran ini berlaku jika semua skor berikut tercapai.", "muted"));
+            if (!unreachable) {
+                required.getChildren().add(Editor.note("Saran ini berlaku jika semua skor berikut tercapai.", "muted"));
+            }
             for (Assessment assessment : free) {
-                required.getChildren().add(Editor.note(assessment.name() + " · " + score(projection, assessment), "target-score-item"));
+                var score = ResultText.scoreRecommendation(projection, assessment);
+                required.getChildren().add(Editor.note(assessment.name() + " · " + score.display(), "target-score-item"));
             }
         }
         if (projection.status() == Calculation.Status.WITH_SUGGESTIONS) {
             required.getChildren().add(Editor.note("Proyeksi dengan skor saran " + result(projection.percent()), "muted"));
         }
 
-        VBox maximum = new VBox(2, Editor.note(result(projection.maximum()), "target-normal-value"),
-                Editor.note(maximumLabel, "muted"));
+        VBox maximum = new VBox(2, Editor.note("Nilai akhir tertinggi", "field-label"),
+                Editor.note(result(projection.maximum()), "target-normal-value"));
+        if (!unreachable) {
+            maximum.getChildren().add(Editor.note("Jika semua penilaian tersisa mendapat skor maksimum normal.", "muted"));
+        }
         HBox comparison = new HBox(16, required, maximum);
         comparison.setAlignment(Pos.TOP_LEFT);
         for (VBox column : List.of(required, maximum)) {
@@ -146,10 +144,23 @@ final class TargetSummary extends VBox {
         return comparison;
     }
 
+    private static String shortfall(BigDecimal target, Calculation.Projection projection, List<Assessment> free) {
+        Grade grade = Grade.classify(Exact.of(target));
+        String label = target.compareTo(grade.boundary) == 0 ? letter(grade) : Numbers.display(target) + "%";
+        String condition = switch (free.size()) {
+            case 0 -> "";
+            case 1 -> " meskipun " + free.getFirst().name() + " mendapat "
+                    + ResultText.scoreRecommendation(projection, free.getFirst()).fraction();
+            default -> " meskipun semua penilaian tersisa mendapat skor maksimum normal";
+        };
+        return "Target " + label + " masih kurang " + ResultText.value(projection.shortfall())
+                + " poin persentase" + condition + ".";
+    }
+
     private void renderGrades(List<Calculation.GradeRequirement> entries, List<Assessment> free) {
         toggle.setText(showAll ? "Tampilkan Lebih Sedikit" : "Lihat Semua Target");
         grades.getChildren().clear();
-        String scoreHeading = free.size() == 1 ? "Nilai " + free.getFirst().name() + " Minimum" : "Skor Minimum";
+        String scoreHeading = free.size() == 1 ? "Skor " + free.getFirst().name() : "Skor Penilaian";
         grades.addRow(0, gradeCell(Editor.note("Huruf", "field-label"), true),
                 gradeCell(Editor.note(scoreHeading, "field-label"), true),
                 gradeCell(Editor.note("Status", "field-label"), true));
@@ -159,8 +170,9 @@ final class TargetSummary extends VBox {
             var projection = entry.projection();
             String required = switch (free.size()) {
                 case 0 -> "—";
-                case 1 -> score(projection, free.getFirst());
-                default -> String.join(" · ", free.stream().map(row -> row.name() + " " + score(projection, row)).toList());
+                case 1 -> ResultText.scoreRecommendation(projection, free.getFirst()).display();
+                default -> String.join("\n", free.stream().map(row -> row.name() + " "
+                        + ResultText.scoreRecommendation(projection, row).display()).toList());
             };
             grades.addRow(index++, gradeCell(Editor.note(letter(entry.grade()), "field-label"), false),
                     gradeCell(Editor.note(required, "target-grade-score"), false),
@@ -224,10 +236,6 @@ final class TargetSummary extends VBox {
 
     private static String targetTitle(BigDecimal minimum) {
         return "Target " + letter(Grade.classify(Exact.of(minimum))) + " · " + Numbers.display(minimum) + "%";
-    }
-
-    private static String score(Calculation.Projection projection, Assessment assessment) {
-        return Numbers.display(projection.suggestions().get(assessment.id())) + " / " + Numbers.display(assessment.maximum());
     }
 
     private static String letter(Grade grade) { return grade.toString().replace('-', '−'); }

@@ -152,6 +152,8 @@
     -fx-text-fill: -what-text;
     -fx-alignment: center-left;
 }
+.simulation-assessments .column-header.numeric .label,
+.simulation-assessments .table-cell.numeric { -fx-padding: 0 5; }
 .table-cell.row-name { -fx-font-weight: bold; }
 .table-cell.row-status { -fx-font-size: 12px; -fx-text-fill: -what-muted; }
 .table-cell.required { -fx-text-fill: -what-hover; -fx-font-weight: bold; }

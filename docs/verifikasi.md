@@ -125,3 +125,12 @@ Aplikasi JavaFX diuji dengan basis data demo terisolasi pada Linux, di jendela 1
 | Sesudah, target B dan saran bersyarat 67/100 | [Kartu dan tabel baru pada 1366 × 768](screenshots/32-target-sesudah.png) |
 | Target A di atas maksimum normal | [Penjelasan skor tambahan](screenshots/33-target-di-luar-batas.png) |
 | Skenario dengan dua skor bebas | [Kombinasi pada 960 × 650](screenshots/34-target-kombinasi-960x650.png) |
+
+## Batas skor pada target yang tidak dapat dicapai
+
+Maven `clean verify` lulus dengan 37 tes pada Java 21. Dengan 50 poin persentase tetap dan UAS berbobot 30%, solver tetap menghitung kebutuhan A sebesar 116,67/100 dengan hasil akhir tertinggi 80% (A−) dan kekurangan 5 poin persentase. Ringkasan, Target per Huruf, dan Diperlukan menampilkan batas 100/100 sebagai **Maksimum** untuk A. Target A− tepat di batas dan menampilkan **100/100 · Minimum**. Target B+ menampilkan **83,34/100 · Minimum**. Regresi juga memeriksa batas 40/40 dan tanda kosong untuk skor tanpa rekomendasi.
+
+Aplikasi JavaFX dijalankan pada Linux dengan basis data demo terisolasi. Tiga bagian diperiksa pada 1366 × 768 dan 960 × 650 saat target serta skenario berubah. Kolom Diperlukan dan judul numerik diperiksa hingga 880 × 590. Skenario dengan dua skor bebas memakai maksimum masing-masing pada target yang tidak dapat dicapai dan tetap menampilkan penjelasan kombinasi untuk target yang bisa dicapai. Asumsi tetap 110 terbaca sesuai nilai yang disimpan.
+
+- [Target A dan A−, dengan Ringkasan dan Diperlukan pada layar yang sama](screenshots/35-batas-maksimum-dan-minimum.png)
+- [Skenario dengan batas 40/40 pada 960 × 650](screenshots/36-batas-40-poin-960x650.png)

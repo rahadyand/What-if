@@ -220,8 +220,8 @@ class CalculationTest {
         assertGradeRequirement(report, Grade.B_PLUS, uas, "95.00", WITH_SUGGESTIONS);
         assertGradeRequirement(report, Grade.A_MINUS, uas, "115.00", UNREACHABLE);
         assertGradeRequirement(report, Grade.A, uas, "135.00", UNREACHABLE);
-        assertEquals("100 (+35 bonus)", ResultText.requiredScore(report.selected().suggestions().get(uas.id()),
-                uas.maximum(), report.selected().excess().get(uas.id())));
+        assertEquals("100/100 · Maksimum", ResultText.scoreRecommendation(report.selected(), uas).display());
+        assertEquals(num("35"), report.selected().excess().get(uas.id()).stripTrailingZeros());
         assertEquals(Exact.of(num("8.75")), report.selected().shortfall());
 
         for (var score : List.of("80", "100")) {
@@ -266,6 +266,12 @@ class CalculationTest {
         var report = Calculation.targetReport(simulation);
         assertGradeRequirement(report, Grade.B, uas, "66.67", WITH_SUGGESTIONS);
         assertGradeRequirement(report, Grade.A, uas, "116.67", UNREACHABLE);
+        assertGradeRequirement(report, Grade.A_MINUS, uas, "100.00", WITH_SUGGESTIONS);
+        assertGradeRequirement(report, Grade.B_PLUS, uas, "83.34", WITH_SUGGESTIONS);
+        assertEquals("100/100 · Maksimum", ResultText.scoreRecommendation(gradeProjection(report, Grade.A), uas).display());
+        assertEquals("100/100 · Minimum", ResultText.scoreRecommendation(gradeProjection(report, Grade.A_MINUS), uas).display());
+        assertEquals("83,34/100 · Minimum", ResultText.scoreRecommendation(gradeProjection(report, Grade.B_PLUS), uas).display());
+        assertEquals(Exact.of(5), gradeProjection(report, Grade.A).shortfall());
         assertEquals(Exact.of(80), report.selected().maximum());
         assertEquals(Grade.A_MINUS, Grade.classify(report.selected().maximum()));
         assertEquals(num("67"), ResultText.wholeScoreWithinMaximum(report.selected().commonPercent(), uas.maximum()));
@@ -279,6 +285,27 @@ class CalculationTest {
         assertEquals(SECURED, Calculation.project(simulation).status());
     }
 
+    @Test void recommendationUsesTheAssessmentLimitAndSkipsScoresWithoutASuggestion() {
+        Category category = category("Praktikum", "100");
+        Assessment free = row(category, "40", null);
+        Assessment actual = row(category, "20", "15");
+        var simulation = new Simulation(totalCourse(category, List.of(free, actual)));
+        simulation.chooseGrade(Grade.A);
+        var reachable = Calculation.project(simulation);
+        assertEquals(num("36.00"), reachable.suggestions().get(free.id()));
+        assertEquals("36/40 · Minimum", ResultText.scoreRecommendation(reachable, free).display());
+
+        simulation.targetInput("95");
+        var unreachable = Calculation.project(simulation);
+        assertEquals(UNREACHABLE, unreachable.status());
+        assertEquals(num("42.00"), unreachable.suggestions().get(free.id()));
+        assertEquals("40/40 · Maksimum", ResultText.scoreRecommendation(unreachable, free).display());
+        assertNull(ResultText.scoreRecommendation(unreachable, actual));
+        assertNull(ResultText.scoreRecommendation(null, free));
+        simulation.setExcluded(free.id(), true);
+        assertNull(ResultText.scoreRecommendation(Calculation.project(simulation), free));
+    }
+
     @Test void wholePointHintRespectsFractionalNormalMaximum() {
         Category category = category("Praktikum", "100");
         var simulation = new Simulation(totalCourse(category, List.of(row(category, "1.005", null))));
@@ -290,9 +317,13 @@ class CalculationTest {
 
     private static void assertGradeRequirement(Calculation.TargetReport report, Grade grade, Assessment assessment,
                                                String required, Calculation.Status status) {
-        var projection = report.grades().stream().filter(item -> item.grade() == grade).findFirst().orElseThrow().projection();
+        var projection = gradeProjection(report, grade);
         assertEquals(num(required), projection.suggestions().get(assessment.id()));
         assertEquals(status, projection.status());
+    }
+
+    private static Calculation.Projection gradeProjection(Calculation.TargetReport report, Grade grade) {
+        return report.grades().stream().filter(item -> item.grade() == grade).findFirst().orElseThrow().projection();
     }
 
     @Test void partialAverageContributionAndRepresentedWeightAreSeparate() {

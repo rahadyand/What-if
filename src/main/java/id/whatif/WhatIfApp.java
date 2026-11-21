@@ -29,7 +29,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -535,6 +534,7 @@ public final class WhatIfApp extends Application {
         table.getStyleClass().add("assessments");
         table.setFixedCellSize(simulation == null ? 38 : 32);
         if (simulation != null) {
+            table.getStyleClass().add("simulation-assessments");
             table.setMinHeight(Region.USE_PREF_SIZE);
             table.setMaxHeight(Region.USE_PREF_SIZE);
             table.setSkin(new CompactAssessmentSkin(table));
@@ -542,16 +542,16 @@ public final class WhatIfApp extends Application {
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         TableColumn<ViewRow, String> name = column("Penilaian", 115, 234, ViewRow::name, "row-name");
         TableColumn<ViewRow, String> category = column("Kategori", 76, 140, ViewRow::category, "");
-        TableColumn<ViewRow, String> max = column("Maks.", 72, 78, ViewRow::maximum, "numeric");
+        TableColumn<ViewRow, String> max = column("Maks.", simulation == null ? 72 : 57, 78, ViewRow::maximum, "numeric");
         TableColumn<ViewRow, String> entered = column(simulation == null ? "Diperoleh" : "Nilai tetap",
-                100, 112, ViewRow::entered, "numeric");
+                simulation == null ? 100 : 84, 112, ViewRow::entered, "numeric");
         if (simulation == null) {
             table.getColumns().setAll(List.of(name, category, max, entered,
                     column("Status", 118, 165, ViewRow::status, "row-status")));
         } else {
             table.getColumns().setAll(List.of(name, category, max, entered,
-                    column("Diperlukan", 150, 166, ViewRow::required, "numeric required"),
-                    column("Status", 114, 173, ViewRow::status, "row-status")));
+                    column("Diperlukan", 171, 185, ViewRow::required, "numeric required"),
+                    column("Status", 99, 173, ViewRow::status, "row-status")));
         }
 
         VBox placeholder = new VBox(4, label("Belum ada penilaian", "field-label"),
@@ -700,13 +700,9 @@ public final class WhatIfApp extends Application {
         }
         targetSummary.render(simulation, openedScenario, course, report, calculationError);
         Calculation.Projection projection = report == null ? null : report.selected();
-        Map<UUID, BigDecimal> suggestions = projection == null ? Map.of() : projection.suggestions();
-        Map<UUID, BigDecimal> excess = projection == null ? Map.of() : projection.excess();
-        List<ViewRow> rows = simulation.rows().stream().map(row -> simulationRow(row, suggestions, excess)).toList();
+        List<ViewRow> rows = simulation.rows().stream().map(row -> simulationRow(row, projection)).toList();
         long included = rows.stream().filter(row -> !row.excluded()).count();
-        String count = included + " dari " + rows.size() + " disertakan";
-        if (!excess.isEmpty()) count += " · Bonus hanya jika diizinkan dosen";
-        fillTable(rows, selectRow, count);
+        fillTable(rows, selectRow, included + " dari " + rows.size() + " disertakan");
         if (projection == null) {
             showResult("Nilai proyeksi", null, "Hasil tidak tersedia", "Perbaiki isian yang ditandai.", "warning");
         } else if (projection.status() == Calculation.Status.EMPTY) {
@@ -723,7 +719,7 @@ public final class WhatIfApp extends Application {
                 + ResultText.percent(projection.maximum());
         if (unreachable) {
             detail += "\nKekurangan: " + ResultText.value(projection.shortfall()) + " poin persentase. "
-                    + (projection.excess().isEmpty() ? "Semua penilaian yang disertakan memiliki nilai tetap."
+                    + (projection.suggestions().isEmpty() ? "Semua penilaian yang disertakan memiliki nilai tetap."
                     : "Penilaian tersisa tidak cukup dalam batas skor normal.");
         }
         if (conditional) detail += "\nBersyarat: asumsi " + String.join(", ", projection.aboveMaximumAssumptions())
@@ -755,14 +751,15 @@ public final class WhatIfApp extends Application {
                 score(row.earned()), NONE, row.earned() == null ? "Belum dinilai" : "Aktual", false, false);
     }
 
-    private ViewRow simulationRow(Simulation.Row row, Map<UUID, BigDecimal> suggestions, Map<UUID, BigDecimal> excess) {
+    private ViewRow simulationRow(Simulation.Row row, Calculation.Projection projection) {
         Assessment value = row.value();
         String status = row.excluded() ? "Dikeluarkan"
                 : row.assumption() ? "Asumsi tetap"
                 : value.earned() == null ? "Bebas" : "Aktual";
         if (row.original() == null) status += " · Hipotetis";
         else if (row.modified()) status += " · Diubah";
-        String required = ResultText.requiredScore(suggestions.get(value.id()), value.maximum(), excess.get(value.id()));
+        var recommendation = ResultText.scoreRecommendation(projection, value);
+        String required = recommendation == null ? NONE : recommendation.display();
         return new ViewRow(value.id(), value.name(), simulation.baseline().categoryName(value.categoryId()), Numbers.display(value.maximum()),
                 score(value.earned()), required, status, row.excluded(),
                 row.original() != null && (row.modified() || row.excluded()));
