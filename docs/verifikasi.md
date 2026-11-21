@@ -97,3 +97,18 @@ Probe JavaFX memakai basis data sementara di desktop virtual Linux. Pada 1366 ×
 Probe JavaFX di Linux memakai basis data sementara. Pada 1366 × 768, probe menguji ganti nama, penolakan nama kosong, kegagalan simpan yang tetap menahan isian, dan konsistensi skenario setelah buka ulang. Penilaian, kategori, dan bobot tetap terhubung ke UUID mata kuliah yang sama. Probe juga menguji bobot 99,99% yang ditolak di editor, target invalid, semua ambang dari model Grade, dan pemilihan dua alternatif di ringkasan tanpa mengganggu draf. Untuk 0, 3 dan 11 penilaian, probe memeriksa tinggi tabel terhadap header yang dirender serta batas delapan baris. Pada 960 × 650, gulir halaman mencapai ringkasan, tabel dengan 11 penilaian memiliki gulir sendiri, dan tombol Enter membuka editor penilaian terpilih. Windows native dan DPI Windows belum diuji untuk revisi ini.
 
 [Tabel dan kebutuhan bonus](screenshots/21-target-dan-tabel-ringkas.png) · [Ringkasan per huruf](screenshots/22-ringkasan-per-huruf.png) · [Perbandingan di ringkasan](screenshots/24-bandingkan-di-ringkasan.png) · [Ringkasan pada 960 × 650](screenshots/25-ringkasan-ukuran-kecil.png) · [Delapan baris terlihat dari sebelas](screenshots/26-tabel-sebelas-baris.png)
+
+## Logo dan saran nama simulasi
+
+`clean verify` lulus dengan 34 tes di Java 21. Regresi memeriksa kecocokan batas huruf yang tepat, persentase desimal, dan penyimpanan skenario bernama sama sebagai catatan terpisah. JAR memuat SVG asli dan PNG transparan berukuran 1060 × 360 piksel. SVG cocok byte demi byte dengan lampiran.
+
+Aplikasi JavaFX dijalankan pada Linux dengan layar virtual dan basis data demo terisolasi. Logo tampil sekali, proporsional, dan tanpa terpotong pada 1366 × 768 dan 960 × 650. Gambar memiliki nama aksesibel “What If”. Runtime melaporkan Merriweather Bold untuk judul dan System Regular untuk teks isi.
+
+Dialog otomatis memfokuskan dan menyeleksi `Target A-` pada 80% serta `Target 84,5%` pada 84,5%. Saran huruf langsung bisa disimpan. Nama kosong ditolak. Kegagalan SQLite yang dipicu dalam pengujian mempertahankan nama `Proyeksi Desimal` dan penyimpanan ulang berhasil. Batal mempertahankan target draf tanpa membuat skenario baru. Memperbarui target skenario lama mempertahankan nama dan identitasnya. Nama pilihan serta target baru dapat dibuka kembali setelah aplikasi dimulai ulang. Nilai aktual demo tetap 80. Pemeriksaan ini dilakukan pada Linux.
+
+| Kondisi | Tangkapan layar |
+| --- | --- |
+| Nilai aktual dan logo pada 1366 × 768 | [Lihat tampilan desktop](screenshots/27-logo-desktop.png) |
+| Saran berdasarkan batas huruf | [Lihat dialog Target A-](screenshots/28-nama-target-huruf.png) |
+| Saran berdasarkan target desimal | [Lihat dialog Target 84,5%](screenshots/29-nama-target-desimal.png) |
+| Skenario dibuka kembali pada 960 × 650 | [Lihat tampilan jendela kecil](screenshots/30-logo-jendela-kecil.png) |

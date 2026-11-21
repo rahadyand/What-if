@@ -8,12 +8,15 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Pos;
+import javafx.scene.AccessibleRole;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.ButtonBar.ButtonData;
 import javafx.scene.control.skin.TableViewSkin;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
@@ -94,7 +97,7 @@ public final class WhatIfApp extends Application {
         stage.show();
         initialize();
         root.applyCss();
-        Label heading = (Label) root.lookup(".brand-title");
+        Label heading = (Label) root.lookup(".empty-page .page-title");
         Label body = (Label) root.lookup(".empty-page .muted");
         System.out.println("What If rendered heading: " + heading.getFont().getName() + " (" + heading.getFont().getStyle() + ")");
         System.out.println("What If rendered body: " + body.getFont().getName() + " (" + body.getFont().getStyle() + ")");
@@ -121,9 +124,14 @@ public final class WhatIfApp extends Application {
     }
 
     private VBox sidebar() {
-        Label mark = label("?", "brand-mark");
-        Label brand = heading("What If", "brand-title");
-        HBox identity = new HBox(11, mark, brand);
+        ImageView logo = new ImageView(new Image(WhatIfApp.class.getResource("/branding/Logo.png").toExternalForm()));
+        logo.getStyleClass().add("brand-logo");
+        logo.setAccessibleRole(AccessibleRole.IMAGE_VIEW);
+        logo.setAccessibleText("What If");
+        logo.setFitWidth(176);
+        logo.setPreserveRatio(true);
+        logo.setSmooth(true);
+        HBox identity = new HBox(logo);
         identity.setAlignment(Pos.CENTER_LEFT);
 
         courseCount = label("0", "sidebar-count");
@@ -334,10 +342,19 @@ public final class WhatIfApp extends Application {
     }
 
     private boolean saveScenario(boolean copy, boolean redraw) {
+        BigDecimal target;
+        try {
+            target = simulation.target();
+        } catch (IllegalArgumentException invalid) {
+            setTargetError(invalid.getMessage());
+            targetField.requestFocus();
+            return false;
+        }
         Scenario previous = copy ? null : openedScenario;
         UUID id = previous == null ? UUID.randomUUID() : previous.id();
-        TextField name = new TextField(previous != null ? previous.name()
-                : copy && openedScenario != null ? openedScenario.name() + " – salinan" : "");
+        boolean suggestName = openedScenario == null;
+        TextField name = new TextField(suggestName ? Scenario.suggestedName(target)
+                : copy ? openedScenario.name() + " – salinan" : previous.name());
         name.setPromptText("Nama skenario");
         Simulation.State state = simulation.state();
         var saved = new java.util.concurrent.atomic.AtomicBoolean();
@@ -356,7 +373,12 @@ public final class WhatIfApp extends Application {
                         busy = false;
                         failure.accept(message);
                     });
-                }, unused -> {}, name, name.textProperty());
+                }, unused -> {}, name, () -> {
+                    if (suggestName) Platform.runLater(() -> {
+                        name.requestFocus();
+                        name.selectAll();
+                    });
+                }, name.textProperty());
         if (redraw && saved.get()) showCourse(selectedRowId());
         return saved.get();
     }

@@ -17,6 +17,42 @@ import static org.junit.jupiter.api.Assertions.*;
 class ScenarioStoreTest {
     @TempDir Path directory;
 
+    @Test void suggestsTheExactGradeBoundaryOrLocalizedPercentage() {
+        for (Grade grade : Grade.values()) {
+            assertEquals("Target " + grade, Scenario.suggestedName(grade.boundary.setScale(2)));
+        }
+        assertEquals("Target 84,5%", Scenario.suggestedName(decimal("84.50")));
+        assertEquals("Target 79,999%", Scenario.suggestedName(decimal("79.999")));
+        assertEquals("Target 100%", Scenario.suggestedName(decimal("100")));
+    }
+
+    @Test void acceptingTheSameSuggestedNameCreatesIndependentScenarios() throws Exception {
+        Path db = directory.resolve("suggested-name.sqlite3");
+        var store = new CourseStore(db);
+        store.initialize();
+        Course course = sample("Algoritma");
+        store.save(null, course);
+        var draft = new Simulation(course);
+        draft.targetInput("80");
+        var named = new Scenario(UUID.randomUUID(), Scenario.suggestedName(draft.target()), draft.state());
+        store.saveScenario(null, named);
+        draft.targetInput("84,5");
+        var revised = new Scenario(named.id(), named.name(), draft.state());
+        store.saveScenario(named, revised);
+        draft.targetInput("80");
+        var separate = new Scenario(UUID.randomUUID(), Scenario.suggestedName(draft.target()), draft.state());
+        store.saveScenario(null, separate);
+
+        var reopened = new CourseStore(db);
+        reopened.initialize();
+        assertEquals(List.of(revised, separate), reopened.loadScenarios());
+        assertEquals("Target A-", revised.name());
+        assertEquals(revised.name(), separate.name());
+        assertNotEquals(revised.id(), separate.id());
+        assertEquals("84,5", revised.state().target());
+        assertEquals(List.of(course), reopened.load());
+    }
+
     @Test void scenariosRoundTripWithIndependentCopiesAndNoActualWrites() throws Exception {
         Path db = directory.resolve("snapshots.sqlite3");
         var store = new CourseStore(db);

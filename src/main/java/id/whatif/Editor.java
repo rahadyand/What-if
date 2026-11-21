@@ -194,6 +194,11 @@ final class Editor {
 
     static <T> void show(Window owner, String title, String action, VBox fields, Supplier<T> read,
                          Save<T> save, Consumer<Boolean> invalid, Node first, Observable... inputs) {
+        show(owner, title, action, fields, read, save, invalid, first, () -> {}, inputs);
+    }
+
+    static <T> void show(Window owner, String title, String action, VBox fields, Supplier<T> read,
+                         Save<T> save, Consumer<Boolean> invalid, Node first, Runnable onShown, Observable... inputs) {
         Dialog<Void> dialog = dialog(owner, title);
         ButtonType applyType = new ButtonType(action, ButtonData.OK_DONE);
         ButtonType cancelType = new ButtonType("Batal", ButtonData.CANCEL_CLOSE);
@@ -222,6 +227,7 @@ final class Editor {
         dialog.setOnShown(event -> {
             validate.run();
             first.requestFocus();
+            onShown.run();
         });
         dialog.setOnHidden(event -> invalid.accept(false));
         dialog.setOnCloseRequest(event -> {

@@ -32,17 +32,6 @@
     -fx-border-color: transparent -what-line transparent transparent;
     -fx-padding: 23 15 18 16;
 }
-.brand-title { -fx-font-size: 24px; }
-.brand-mark {
-    -fx-background-color: -what-accent;
-    -fx-background-radius: 8;
-    -fx-alignment: center;
-    -fx-min-width: 35;
-    -fx-min-height: 35;
-    -fx-text-fill: white;
-    -fx-font-size: 21px;
-    -fx-font-weight: bold;
-}
 .sidebar-count {
     -fx-text-fill: -what-muted;
     -fx-padding: 2 7;
