@@ -25,7 +25,13 @@
 .muted { -fx-text-fill: -what-muted; -fx-font-size: 13px; }
 .eyebrow { -fx-text-fill: -what-muted; -fx-font-size: 12px; -fx-font-weight: bold; }
 .field-label { -fx-font-weight: bold; }
-.page-title { -fx-font-size: 27px; }
+.page-title, .dashboard-title Text { -fx-font-size: 27px; }
+.dashboard-title Text {
+    -fx-font-family: "Merriweather";
+    -fx-font-weight: bold;
+    -fx-fill: -what-text;
+}
+.dashboard-title .dashboard-title-italic { -fx-font-style: italic; }
 .section-title { -fx-font-size: 19px; }
 .sidebar {
     -fx-background-color: -what-side;

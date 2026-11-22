@@ -2,6 +2,7 @@
 
 - Logo What If menggunakan [SVG asli](../src/main/resources/branding/Logo.svg) yang diberikan pemilik proyek. JavaFX menampilkan [hasil render PNG transparan](../src/main/resources/branding/Logo.png) berukuran 1060 × 360 piksel dari halaman SVG.
 - **Merriweather Bold**, versi 2.200. Copyright 2020 The Merriweather Project Authors (https://github.com/SorkinType/Merriweather/), dengan Reserved Font Name “Merriweather”. Distribusi font mengikuti [SIL Open Font License 1.1](../src/main/resources/fonts/OFL.txt). Berkas TTF berasal dari [repositori Merriweather](https://github.com/SorkinType/Merriweather/blob/master/fonts/ttf/Merriweather-Bold.ttf), blob `0e104b346ae9ff42c9eca6b047b5bac02a3baf7c`.
+- **Merriweather Bold Italic** menggunakan lisensi OFL yang sama. Berkas TTF berasal dari [repositori Merriweather](https://github.com/SorkinType/Merriweather/blob/master/fonts/ttf/Merriweather-BoldItalic.ttf), blob `b1dc207ca4913611d63fe6856b18ae203899cd47`.
 - Skrip Apache Maven Wrapper 3.3.2 didistribusikan sesuai [Apache License 2.0](apache-2.0.txt). Maven didapatkan melalui Wrapper.
 - Maven mengunduh [OpenJFX](https://openjfx.io/) (GPL v2 dengan Classpath Exception), [SQLite JDBC](https://github.com/xerial/sqlite-jdbc) (Apache License 2.0, termasuk SQLite), dan [JUnit](https://junit.org/) (Eclipse Public License 2.0, hanya untuk pengujian).
 

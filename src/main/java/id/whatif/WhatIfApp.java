@@ -24,6 +24,7 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -86,7 +87,7 @@ public final class WhatIfApp extends Application {
 
     public static void main(String[] arguments) { launch(arguments); }
 
-    @Override public void start(Stage window) {
+    @Override public void start(Stage window) throws IOException {
         stage = window;
         store = new CourseStore(CourseStore.defaultDatabase());
         loadTypography();
@@ -113,10 +114,13 @@ public final class WhatIfApp extends Application {
 
     @Override public void stop() { io.shutdown(); }
 
-    private static void loadTypography() {
-        Font bold = Font.loadFont(WhatIfApp.class.getResource("/fonts/Merriweather-Bold.ttf").toExternalForm(), 20);
-        headingFamily = bold == null ? "Serif" : bold.getFamily();
-
+    private static void loadTypography() throws IOException {
+        try (var boldSource = WhatIfApp.class.getResourceAsStream("/fonts/Merriweather-Bold.ttf");
+             var italicSource = WhatIfApp.class.getResourceAsStream("/fonts/Merriweather-BoldItalic.ttf")) {
+            Font bold = Font.loadFont(boldSource, 20);
+            Font.loadFont(italicSource, 20);
+            headingFamily = bold == null ? "Serif" : bold.getFamily();
+        }
     }
 
     static void style(Parent pane) {

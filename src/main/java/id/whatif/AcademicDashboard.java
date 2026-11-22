@@ -8,6 +8,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.Region;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
 
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -25,8 +27,12 @@ final class AcademicDashboard extends VBox {
 
         Region fill = new Region();
         HBox.setHgrow(fill, Priority.ALWAYS);
-        HBox welcome = new HBox(12, WhatIfApp.heading("Welcome to", "page-title"), WhatIfApp.wordmark(166),
-                fill, WhatIfApp.button("Pengaturan Skala Nilai", configureScale));
+        Text brandEnding = new Text("If?");
+        brandEnding.getStyleClass().add("dashboard-title-italic");
+        TextFlow welcomeTitle = new TextFlow(new Text("Welcome to What"), brandEnding);
+        welcomeTitle.setAccessibleText("Welcome to WhatIf?");
+        welcomeTitle.getStyleClass().add("dashboard-title");
+        HBox welcome = new HBox(12, welcomeTitle, fill, WhatIfApp.button("Pengaturan Skala Nilai", configureScale));
         welcome.setAlignment(Pos.CENTER_LEFT);
         welcome.getStyleClass().add("dashboard-welcome");
         getChildren().add(welcome);
